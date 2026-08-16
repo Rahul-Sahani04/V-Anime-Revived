@@ -10,7 +10,15 @@ export default async function WatchPage({
   const { id, episode } = await params;
   const { server = "senshi", type = "sub" } = await searchParams;
 
-  const availableServers = ["anikoto", "animepahe", "senshi", "animeheaven", "miruro"];
+  const availableServers = [
+    "anizone",
+    "anineko",
+    "reanime",
+    "anikoto",
+    "senshi",
+    "animeheaven",
+    "miruro",
+  ];
 
   return (
     <WatchPlayerClient
@@ -22,4 +30,3 @@ export default async function WatchPage({
     />
   );
 }
-

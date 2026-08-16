@@ -24,17 +24,17 @@ export interface PlaybackSource {
 
 /**
  * Return the available sources for AniVault.
- * We treat "sources" (anikoto, miruro, senshi, animeheaven) as the "servers" in our UI.
+ * We rank them by reliability.
  */
 export async function getAvailableServers(animeId: string, episode: string): Promise<Server[]> {
-  // AniVault has these main sources available.
-  // We rank them by reliability.
   return [
-    { id: "anikoto", name: "Anikoto", score: 100 },
-    { id: "animepahe", name: "AnimePahe", score: 95 },
-    { id: "miruro", name: "Miruro", score: 90 },
+    { id: "anizone", name: "AniZone", score: 100 },
+    { id: "anineko", name: "AniNeko", score: 95 },
+    { id: "reanime", name: "Re:Anime", score: 90 },
+    { id: "anikoto", name: "Anikoto", score: 85 },
     { id: "senshi", name: "Senshi", score: 80 },
-    { id: "animeheaven", name: "AnimeHeaven", score: 70 }
+    { id: "animeheaven", name: "AnimeHeaven", score: 75 },
+    { id: "miruro", name: "Miruro", score: 70 },
   ];
 }
 
@@ -51,7 +51,7 @@ export async function resolveStreamWithFallback(
   availableServers: Server[]
 ): Promise<PlaybackSource> {
   
-  // Sort servers so preferred is first, then ordered by score (mock scoring for now)
+  // Sort servers so preferred is first, then ordered by score
   const fallbackQueue = [
     preferredServer,
     ...availableServers
