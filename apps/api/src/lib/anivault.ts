@@ -28,9 +28,10 @@ export interface PlaybackSource {
  */
 export async function getAvailableServers(animeId: string, episode: string): Promise<Server[]> {
   // AniVault has these main sources available.
-  // We rank them by reliability. Currently Anikoto is the most stable.
+  // We rank them by reliability.
   return [
     { id: "anikoto", name: "Anikoto", score: 100 },
+    { id: "animepahe", name: "AnimePahe", score: 95 },
     { id: "miruro", name: "Miruro", score: 90 },
     { id: "senshi", name: "Senshi", score: 80 },
     { id: "animeheaven", name: "AnimeHeaven", score: 70 }

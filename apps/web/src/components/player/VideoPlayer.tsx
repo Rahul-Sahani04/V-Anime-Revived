@@ -87,9 +87,10 @@ export function VideoPlayer({ animeId, episode, server = "senshi", type = "sub" 
           setError("Your browser does not support HLS video playback.");
           setIsLoading(false);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Stream fetch error:", err);
-        setError(err.message || "Failed to load video stream.");
+        const message = err instanceof Error ? err.message : "Failed to load video stream.";
+        setError(message);
         setIsLoading(false);
       }
     };
