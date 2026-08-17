@@ -15,8 +15,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "V-Anime Revived",
-  description: "Modern Anime Streaming",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),
+  title: {
+    default: "V-Anime Revived | Next-Gen Anime Streaming",
+    template: "%s | V-Anime Revived",
+  },
+  description: "Modern Anime Streaming with HD playback, zero ads, multi-server fallback, and AniList sync.",
+  openGraph: {
+    title: "V-Anime Revived",
+    description: "Modern Anime Streaming with HD playback, zero ads, and AniList sync.",
+    siteName: "V-Anime Revived",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "V-Anime Revived",
+    description: "Modern Anime Streaming with HD playback, zero ads, and AniList sync.",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

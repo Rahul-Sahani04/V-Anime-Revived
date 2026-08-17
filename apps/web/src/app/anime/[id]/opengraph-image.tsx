@@ -96,7 +96,6 @@ export default async function AnimeOGImage({
             height: "100%",
             padding: "50px 60px",
             gap: "45px",
-            zIndex: 10,
           }}
         >
           {/* Poster Image Card */}

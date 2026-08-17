@@ -46,7 +46,6 @@ export default async function OGImage() {
             alignItems: "center",
             justifyContent: "space-between",
             width: "100%",
-            zIndex: 10,
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
@@ -93,7 +92,7 @@ export default async function OGImage() {
         </div>
 
         {/* Main Content: Hero Headline & Subtext */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "18px", zIndex: 10, maxWidth: "900px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "18px", maxWidth: "900px" }}>
           <h1
             style={{
               fontSize: "64px",
@@ -124,7 +123,6 @@ export default async function OGImage() {
             display: "flex",
             alignItems: "center",
             gap: "16px",
-            zIndex: 10,
           }}
         >
           <div

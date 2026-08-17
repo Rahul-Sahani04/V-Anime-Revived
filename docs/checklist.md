@@ -60,10 +60,9 @@ This document tracks the overall progress of the V-Anime Revived project.
 - **User Profiles & Playback Preferences (`/profile`)**:
   - Implemented `getUserStats` in Convex to calculate lifetime watched episodes, total hours streamed, watchlist count, and milestone badges (e.g., "Otaku Master 👑", "Binge Watcher 🍿").
   - Implemented `/profile` dashboard allowing users to configure default audio tracks (Subbed JP vs Dubbed EN), preferred video servers (Senshi, Anikoto, Miruro, etc.), Autoplay, and Auto-Next triggers with instant optimistic saving and toast alerts.
-- **AniList OAuth & Watchlist Synchronization**:
-  - Configured OAuth API Client (`48831`) with 1-Click implicit authorization and auto-token URL hash reader.
-  - Implemented `connectAniListToken`, `disconnectAniListAccount`, `toggleAutoSync`, `importAniListCollection`, and `syncEpisodeProgressToAniList` in Convex.
-  - Implemented bi-directional synchronization: One-click collection import (Current, Planning, Completed) into V-Anime Watchlist and automatic episode push updates to AniList on playback completion.
+- **Dynamic OpenGraph Image Generation & SEO Metadata**:
+  - Implemented dynamic 1200x630 `ImageResponse` OG engines for Global Home (`/opengraph-image`), Anime Details (`/anime/[id]/opengraph-image`), Watch Episode Player (`/anime/[id]/watch/[episode]/opengraph-image`), Search (`/search/opengraph-image`), and Library (`/library/opengraph-image`).
+  - Configured `metadataBase`, dynamic Twitter summary cards, and canonical URL structure across all routes.
 
 ## ⏳ Work In Progress (WIP)
 - **Social Features**: Comment sections under episodes, episode ratings, and user reviews.
@@ -71,4 +70,3 @@ This document tracks the overall progress of the V-Anime Revived project.
 ## 🛑 Haven't Started
 - **Notifications**: Alerts for when a new episode of a favorited anime drops.
 - **Admin Dashboard**: A hidden route for managing site analytics or featured shows.
-- **SEO & Meta Tags**: OpenGraph tags, dynamic sitemaps, and indexing optimizations for search engines.
