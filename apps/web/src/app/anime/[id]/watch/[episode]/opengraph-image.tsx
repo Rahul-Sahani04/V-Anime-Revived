@@ -63,7 +63,6 @@ export default async function WatchOGImage({
               height: "100%",
               objectFit: "cover",
               opacity: 0.3,
-              filter: "blur(6px)",
             }}
           />
         ) : null}

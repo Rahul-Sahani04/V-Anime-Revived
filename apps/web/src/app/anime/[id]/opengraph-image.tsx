@@ -72,7 +72,6 @@ export default async function AnimeOGImage({
               height: "100%",
               objectFit: "cover",
               opacity: 0.25,
-              filter: "blur(8px)",
             }}
           />
         ) : null}

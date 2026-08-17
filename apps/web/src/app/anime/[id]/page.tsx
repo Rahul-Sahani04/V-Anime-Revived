@@ -22,11 +22,14 @@ export async function generateMetadata({
     const title = anime.title?.english || anime.title?.romaji || "Anime Details";
     return {
       title: `${title} | V-Anime Revived`,
-      description: anime.description || `Stream ${title} on V-Anime Revived in HD with Sub & Dub.`,
+      description: anime.description
+        ? anime.description.replace(/<[^>]*>?/gm, "").slice(0, 160)
+        : `Stream ${title} on V-Anime Revived in HD with Sub & Dub.`,
       openGraph: {
         title: `${title} - V-Anime Revived`,
-        description: anime.description || `Watch ${title} in HD with multi-server playback.`,
-        images: anime.bannerImage ? [anime.bannerImage] : anime.coverImage?.extraLarge ? [anime.coverImage.extraLarge] : [],
+        description: anime.description
+          ? anime.description.replace(/<[^>]*>?/gm, "").slice(0, 160)
+          : `Watch ${title} in HD with multi-server playback.`,
       },
     };
   } catch {
