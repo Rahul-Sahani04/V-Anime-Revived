@@ -9,6 +9,9 @@
  */
 
 import type * as anilist from "../anilist.js";
+import type * as library from "../library.js";
+import type * as progress from "../progress.js";
+import type * as preferences from "../preferences.js";
 
 import type {
   ApiFromModules,
@@ -18,6 +21,9 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   anilist: typeof anilist;
+  library: typeof library;
+  progress: typeof progress;
+  preferences: typeof preferences;
 }>;
 
 /**

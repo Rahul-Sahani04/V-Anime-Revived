@@ -3,8 +3,12 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
-import { Play, Bookmark, Sparkles, Layers } from "lucide-react";
+import { Play, Bookmark, Heart, Sparkles, Layers } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@convex/_generated/api";
 
 interface AnimeDetailsClientProps {
   anime: {
@@ -23,9 +27,19 @@ interface AnimeDetailsClientProps {
 }
 
 export function AnimeDetailsClient({ anime }: AnimeDetailsClientProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"episodes" | "details">("episodes");
-  const [isBookmarked, setIsBookmarked] = useState(false);
   const [episodeSearch, setEpisodeSearch] = useState("");
+
+  const numId = parseInt(anime.id, 10) || 0;
+  const { isSignedIn } = useAuth();
+
+  const userStatus = useQuery(
+    api.library.getAnimeUserStatus,
+    numId > 0 ? { anilistId: numId } : "skip"
+  );
+  const toggleFavoriteMutation = useMutation(api.library.toggleFavorite);
+  const toggleWatchlistMutation = useMutation(api.library.toggleWatchlist);
 
   const episodesList = Array.from({ length: anime.episodes }, (_, i) => ({
     number: i + 1,
@@ -38,6 +52,26 @@ export function AnimeDetailsClient({ anime }: AnimeDetailsClientProps) {
         ep.number.toString().includes(episodeSearch) || ep.title.toLowerCase().includes(episodeSearch.toLowerCase())
       )
     : episodesList;
+
+  const handleToggleWatchlist = async () => {
+    if (!isSignedIn) {
+      router.push(`/sign-in?redirect_url=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+    if (numId > 0) {
+      await toggleWatchlistMutation({ anilistId: numId });
+    }
+  };
+
+  const handleToggleFavorite = async () => {
+    if (!isSignedIn) {
+      router.push(`/sign-in?redirect_url=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+    if (numId > 0) {
+      await toggleFavoriteMutation({ anilistId: numId });
+    }
+  };
 
   return (
     <div className="flex flex-col pb-24">
@@ -79,7 +113,7 @@ export function AnimeDetailsClient({ anime }: AnimeDetailsClientProps) {
             </div>
 
             {/* Quick Mobile Action Buttons */}
-            <div className="mt-4 flex gap-2 md:hidden">
+            <div className="mt-4 flex flex-col gap-2 md:hidden">
               <Link
                 href={`/anime/${anime.id}/watch/1`}
                 className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground shadow-lg"
@@ -87,6 +121,29 @@ export function AnimeDetailsClient({ anime }: AnimeDetailsClientProps) {
                 <Play className="h-4 w-4 fill-current" />
                 <span>Watch Ep 1</span>
               </Link>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleToggleWatchlist}
+                  className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold border transition-all ${
+                    userStatus?.isWatchlisted
+                      ? "bg-primary/20 border-primary text-primary"
+                      : "bg-surface border-surface-border text-foreground"
+                  }`}
+                >
+                  <Bookmark className={`h-3.5 w-3.5 ${userStatus?.isWatchlisted ? "fill-current" : ""}`} />
+                  <span>{userStatus?.isWatchlisted ? "Saved" : "Watchlist"}</span>
+                </button>
+                <button
+                  onClick={handleToggleFavorite}
+                  className={`flex items-center justify-center px-4 rounded-xl py-2.5 text-xs font-bold border transition-all ${
+                    userStatus?.isFavorite
+                      ? "bg-primary/20 border-primary text-primary"
+                      : "bg-surface border-surface-border text-foreground"
+                  }`}
+                >
+                  <Heart className={`h-3.5 w-3.5 ${userStatus?.isFavorite ? "fill-current" : ""}`} />
+                </button>
+              </div>
             </div>
           </motion.div>
 
@@ -142,15 +199,29 @@ export function AnimeDetailsClient({ anime }: AnimeDetailsClientProps) {
 
               <motion.button
                 whileTap={{ scale: 0.92 }}
-                onClick={() => setIsBookmarked(!isBookmarked)}
+                onClick={handleToggleWatchlist}
                 className={`flex items-center gap-2 rounded-xl px-5 py-3.5 text-sm font-bold border transition-all ${
-                  isBookmarked
+                  userStatus?.isWatchlisted
                     ? "bg-primary/20 border-primary text-primary shadow-[0_0_15px_rgba(225,29,72,0.3)]"
                     : "bg-surface border-surface-border text-foreground hover:bg-surface-hover"
                 }`}
               >
-                <Bookmark className={`h-4 w-4 ${isBookmarked ? "fill-current" : ""}`} />
-                <span>{isBookmarked ? "In Watchlist" : "Add to Watchlist"}</span>
+                <Bookmark className={`h-4 w-4 ${userStatus?.isWatchlisted ? "fill-current" : ""}`} />
+                <span>{userStatus?.isWatchlisted ? "In Watchlist" : "Add to Watchlist"}</span>
+              </motion.button>
+
+              <motion.button
+                whileTap={{ scale: 0.92 }}
+                onClick={handleToggleFavorite}
+                className={`flex items-center gap-2 rounded-xl px-5 py-3.5 text-sm font-bold border transition-all ${
+                  userStatus?.isFavorite
+                    ? "bg-primary/20 border-primary text-primary shadow-[0_0_15px_rgba(225,29,72,0.3)]"
+                    : "bg-surface border-surface-border text-foreground hover:bg-surface-hover"
+                }`}
+                title="Favorite"
+              >
+                <Heart className={`h-4 w-4 ${userStatus?.isFavorite ? "fill-current" : ""}`} />
+                <span>{userStatus?.isFavorite ? "Favorited" : "Favorite"}</span>
               </motion.button>
             </div>
 

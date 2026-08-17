@@ -21,13 +21,24 @@ This document tracks the overall progress of the V-Anime Revived project.
   - Added interactive buttons to toggle between multiple streaming Servers and Audio formats (Sub/Dub) that directly update the video feed via URL parameters.
 - **CORS & Whitelisting**: Whitelisted AniList CDN (`s4.anilist.co`) in `next.config.ts`.
 
+- **Convex Reactive Backend Modules**:
+  - Implemented `library.ts` (`toggleFavorite`, `toggleWatchlist`, `getLibrary`, `getAnimeUserStatus`).
+  - Implemented `progress.ts` (`updateProgress`, `getAnimeProgress`, `getContinueWatching`, `getWatchHistory`, `syncGuestProgress`).
+  - Implemented `preferences.ts` (`getUserPreferences`, `updateUserPreferences`).
+- **Video Player Playback Tracking & Automation**:
+  - Implemented debounced (15s) time updates, pause/unload saves, and completion (≥90%) detection.
+  - Implemented automatic resumption from saved timestamp with quick "Restart" trigger.
+  - Implemented 5-second Auto-Next episode countdown banner with play immediately and cancel actions.
+  - Implemented full keyboard shortcut support (Space/K, Arrows/J/L for seek, F for fullscreen, M for mute).
+  - Implemented guest fallback to `localStorage` and automatic sync to Convex on Clerk login.
+- **Anime Details Interactive Actions**:
+  - Interactive "Add to Watchlist" and "Favorite" buttons wired directly to reactive Convex mutations with Clerk auth redirect.
+
 ## ⏳ Work In Progress (WIP)
-- **Home Page**: Currently functional but needs polished UI components for Hero banners, trending anime carousels, and seasonal grids.
-- **Search Functionality**: The search page (`/search`) exists but requires UI refinement and deep AniList query integration.
-- **User Library**: Wiring up Convex mutations to allow users to add shows to their "Watchlist" or "Favorites".
-- **Playback Tracking**: Saving the user's current timestamp and episode in Convex so they can resume watching later.
-- **Responsive Design**: Ensuring the video player and navigation menus scale perfectly on mobile devices.
-- **Loading States**: Adding skeleton loaders and Next.js error boundaries for smoother UX during network delays.
+- **Home Page**: Connect Hero and Anime shelves to live AniList/Convex data instead of static mock arrays.
+- **User Library Page**: Build the dedicated `/library` page (Watchlist, Favorites, History, Continue Watching).
+- **Search Page UI Filters**: Add advanced filters (Season, Year, Format, Status) & pagination.
+- **Loading States**: Add skeleton loaders (`loading.tsx`) and Next.js error boundaries.
 
 ## 🛑 Haven't Started
 - **User Profiles**: Custom avatars, bio, and tracking stats.

@@ -69,7 +69,7 @@ export const searchAnime = action({
 
 export const getTrending = action({
   args: {},
-  handler: async (ctx) => {
+  handler: async (_ctx) => {
     const response = await fetch(ANILIST_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },

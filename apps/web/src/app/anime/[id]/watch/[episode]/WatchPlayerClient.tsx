@@ -1,14 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { VideoPlayer } from "@/components/player/VideoPlayer";
+import { useAuth } from "@clerk/nextjs";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@convex/_generated/api";
+import { getAllGuestProgress, clearGuestProgress } from "@/lib/guestProgress";
 import {
   ChevronLeft,
   ChevronRight,
   Tv,
   Volume2,
   List,
+  Bookmark,
+  Heart,
+  Play,
+  X,
 } from "lucide-react";
 
 interface WatchPlayerClientProps {
@@ -26,12 +35,72 @@ export function WatchPlayerClient({
   type,
   availableServers,
 }: WatchPlayerClientProps) {
-  const [showAmbientGlow, setShowAmbientGlow] = useState(true);
-  const currentEpNum = parseInt(episode) || 1;
+  const router = useRouter();
+  const { isSignedIn } = useAuth();
+  const numAnimeId = parseInt(animeId, 10) || 0;
+  const currentEpNum = parseInt(episode, 10) || 1;
   const prevEp = Math.max(1, currentEpNum - 1);
   const nextEp = currentEpNum + 1;
 
-  const totalEpisodes = 24; // Mock total episodes count
+  const [showAmbientGlow, setShowAmbientGlow] = useState(true);
+  const [countdown, setCountdown] = useState<number | null>(null);
+
+  // Convex hooks for Library & Status
+  const animeStatus = useQuery(
+    api.library.getAnimeUserStatus,
+    numAnimeId > 0 ? { anilistId: numAnimeId } : "skip"
+  );
+  const toggleFavoriteMutation = useMutation(api.library.toggleFavorite);
+  const toggleWatchlistMutation = useMutation(api.library.toggleWatchlist);
+  const syncGuestProgressMutation = useMutation(api.progress.syncGuestProgress);
+
+  // Sync guest progress to Convex on login
+  useEffect(() => {
+    if (isSignedIn) {
+      const guestItems = getAllGuestProgress();
+      if (guestItems.length > 0) {
+        syncGuestProgressMutation({ items: guestItems })
+          .then(() => {
+            clearGuestProgress();
+          })
+          .catch((err) => {
+            console.error("Failed to sync guest progress to Convex", err);
+          });
+      }
+    }
+  }, [isSignedIn, syncGuestProgressMutation]);
+
+  // Handle countdown timer for Auto-Next
+  useEffect(() => {
+    if (countdown === null) return;
+
+    const timer = setTimeout(() => {
+      if (countdown <= 1) {
+        setCountdown(null);
+        router.push(`/anime/${animeId}/watch/${nextEp}?server=${server}&type=${type}`);
+      } else {
+        setCountdown((prev) => (prev !== null ? prev - 1 : null));
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [countdown, animeId, nextEp, server, type, router]);
+
+  const handleEpisodeEnd = () => {
+    // Start 5-second countdown to next episode
+    setCountdown(5);
+  };
+
+  const handlePlayNextImmediately = () => {
+    setCountdown(null);
+    router.push(`/anime/${animeId}/watch/${nextEp}?server=${server}&type=${type}`);
+  };
+
+  const handleCancelCountdown = () => {
+    setCountdown(null);
+  };
+
+  const totalEpisodes = 24; // Default standard count for selector
   const episodeList = Array.from({ length: totalEpisodes }, (_, i) => i + 1);
 
   return (
@@ -53,10 +122,42 @@ export function WatchPlayerClient({
               episode={episode}
               server={server}
               type={type}
+              onEpisodeEnd={handleEpisodeEnd}
             />
+
+            {/* Auto-Next 5-Second Overlay Banner */}
+            {countdown !== null && (
+              <div className="absolute bottom-6 right-6 z-40 flex items-center gap-4 rounded-2xl bg-background/95 backdrop-blur-xl border border-primary/40 p-4 shadow-2xl shadow-black animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-center h-10 w-10 rounded-full bg-primary/20 border border-primary text-primary font-mono font-black text-sm">
+                  {countdown}s
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs font-extrabold text-white">
+                    Playing Next Episode {nextEp}
+                  </span>
+                  <span className="text-[11px] text-muted">Auto-advancing shortly</span>
+                </div>
+                <div className="flex items-center gap-2 ml-2">
+                  <button
+                    onClick={handlePlayNextImmediately}
+                    className="flex items-center gap-1 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 transition-all shadow-[0_0_12px_rgba(225,29,72,0.4)]"
+                  >
+                    <Play className="h-3 w-3 fill-current" />
+                    <span>Play Now</span>
+                  </button>
+                  <button
+                    onClick={handleCancelCountdown}
+                    className="flex items-center justify-center h-7 w-7 rounded-xl bg-surface hover:bg-surface-hover text-muted hover:text-white border border-surface-border transition-colors"
+                    title="Cancel auto-play"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Quick Player Bar: Episode Navigation & Ambient Toggle */}
+          {/* Quick Player Bar: Episode Navigation, Quick Actions & Ambient Toggle */}
           <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <Link
@@ -72,7 +173,42 @@ export function WatchPlayerClient({
               </span>
             </div>
 
+            {/* Quick Favorites & Watchlist Toggles */}
             <div className="flex items-center gap-2">
+              {isSignedIn && (
+                <>
+                  <button
+                    onClick={async () => {
+                      if (numAnimeId > 0) await toggleWatchlistMutation({ anilistId: numAnimeId });
+                    }}
+                    className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold border transition-all ${
+                      animeStatus?.isWatchlisted
+                        ? "bg-primary/20 border-primary text-primary"
+                        : "bg-surface text-muted border-surface-border hover:text-white"
+                    }`}
+                    title="Toggle Watchlist"
+                  >
+                    <Bookmark className={`h-3 w-3 ${animeStatus?.isWatchlisted ? "fill-current" : ""}`} />
+                    <span>{animeStatus?.isWatchlisted ? "Watchlisted" : "Watchlist"}</span>
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      if (numAnimeId > 0) await toggleFavoriteMutation({ anilistId: numAnimeId });
+                    }}
+                    className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold border transition-all ${
+                      animeStatus?.isFavorite
+                        ? "bg-primary/20 border-primary text-primary"
+                        : "bg-surface text-muted border-surface-border hover:text-white"
+                    }`}
+                    title="Toggle Favorite"
+                  >
+                    <Heart className={`h-3 w-3 ${animeStatus?.isFavorite ? "fill-current text-primary" : ""}`} />
+                    <span>{animeStatus?.isFavorite ? "Favorited" : "Favorite"}</span>
+                  </button>
+                </>
+              )}
+
               <button
                 onClick={() => setShowAmbientGlow(!showAmbientGlow)}
                 className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold border transition-all ${
