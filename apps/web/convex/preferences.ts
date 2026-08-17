@@ -82,3 +82,54 @@ export const updateUserPreferences = mutation({
     return { success: true };
   },
 });
+
+/**
+ * Calculate user streaming lifetime stats and milestone badges.
+ */
+export const getUserStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getUserId(ctx);
+    if (!userId) {
+      return {
+        totalFavorites: 0,
+        totalWatchlist: 0,
+        totalWatchedEpisodes: 0,
+        totalHoursWatched: 0,
+        rank: "Anime Novice 🌱",
+      };
+    }
+
+    const favorites = await ctx.db
+      .query("favorites")
+      .withIndex("by_user_and_anime", (q) => q.eq("userId", userId))
+      .collect();
+
+    const watchlist = await ctx.db
+      .query("watchlist")
+      .withIndex("by_user_and_anime", (q) => q.eq("userId", userId))
+      .collect();
+
+    const history = await ctx.db
+      .query("watchHistory")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+
+    const totalWatchedEpisodes = history.length;
+    const totalHoursWatched = Math.round((totalWatchedEpisodes * 24) / 60 * 10) / 10;
+
+    let rank = "Anime Novice 🌱";
+    if (totalWatchedEpisodes >= 100) rank = "Otaku Master 👑";
+    else if (totalWatchedEpisodes >= 50) rank = "Seasoned Weeb ⚔️";
+    else if (totalWatchedEpisodes >= 20) rank = "Binge Watcher 🍿";
+    else if (totalWatchedEpisodes >= 5) rank = "Anime Enthusiast ✨";
+
+    return {
+      totalFavorites: favorites.length,
+      totalWatchlist: watchlist.length,
+      totalWatchedEpisodes,
+      totalHoursWatched,
+      rank,
+    };
+  },
+});

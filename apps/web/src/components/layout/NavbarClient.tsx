@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
-import { Search, Sparkles, Library, Compass } from "lucide-react";
+import { Search, Sparkles, Library, Compass, User } from "lucide-react";
 import { CommandSearch } from "../search/CommandSearch";
 
 interface NavbarClientProps {
@@ -16,6 +16,7 @@ const NAV_LINKS = [
   { href: "/", label: "Home", icon: Sparkles },
   { href: "/search", label: "Browse", icon: Compass },
   { href: "/library", label: "My Library", icon: Library },
+  { href: "/profile", label: "Profile", icon: User },
 ];
 
 export function NavbarClient({ authSlot, mobileMenuSlot }: NavbarClientProps) {

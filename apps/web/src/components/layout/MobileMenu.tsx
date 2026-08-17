@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
-import { Menu, X, Search, Sparkles, Compass, Library } from "lucide-react";
+import { Menu, X, Search, Sparkles, Compass, Library, User } from "lucide-react";
 
 export function MobileMenu() {
   const [isOpen, setIsOpen] = useState(false);
@@ -24,6 +24,7 @@ export function MobileMenu() {
     { href: "/", label: "Home", icon: Sparkles },
     { href: "/search", label: "Browse", icon: Compass },
     { href: "/library", label: "My Library", icon: Library },
+    { href: "/profile", label: "Profile", icon: User },
   ];
 
   return (
