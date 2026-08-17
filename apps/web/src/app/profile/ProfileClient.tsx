@@ -106,7 +106,7 @@ export function ProfileClient() {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/20 text-primary border border-primary/30 mb-4">
             <LogIn className="h-7 w-7" />
           </div>
-          <h1 className="text-2xl font-black text-white mb-2">Account Required</h1>
+          <h2 className="text-2xl font-black text-white mb-2">Account Required</h2>
           <p className="text-xs sm:text-sm text-muted mb-6 leading-relaxed">
             Please sign in to view your profile, track lifetime anime streaming statistics, and customize default playback servers.
           </p>

@@ -147,6 +147,9 @@ export function LibraryClient() {
         {/* Global Search within Library */}
         <div className="relative w-full md:w-72">
           <input
+            id="library-search-input"
+            name="library-search"
+            aria-label="Search saved titles"
             type="text"
             placeholder="Search saved titles..."
             value={searchQuery}

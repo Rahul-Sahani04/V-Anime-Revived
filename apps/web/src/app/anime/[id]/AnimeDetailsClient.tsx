@@ -297,6 +297,9 @@ export function AnimeDetailsClient({ anime }: AnimeDetailsClientProps) {
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-xs text-muted font-medium">Select an episode to stream</span>
                   <input
+                    id="episode-search-input"
+                    name="episode-search"
+                    aria-label="Search episode number"
                     type="text"
                     placeholder="Search ep #..."
                     value={episodeSearch}

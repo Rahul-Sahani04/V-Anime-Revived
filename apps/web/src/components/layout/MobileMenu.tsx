@@ -48,6 +48,9 @@ export function MobileMenu() {
           >
             <form onSubmit={handleSearch} className="relative w-full">
               <input 
+                id="mobile-search-input"
+                name="mobile-search"
+                aria-label="Search anime"
                 type="text" 
                 placeholder="Search anime..." 
                 value={searchQuery}

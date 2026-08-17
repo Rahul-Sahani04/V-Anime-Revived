@@ -99,6 +99,9 @@ export function CommandSearch({ isOpen, onClose }: CommandSearchProps) {
             <div className="flex items-center gap-3 border-b border-surface-border px-4 py-3.5 bg-surface/50">
               <Search className="h-5 w-5 text-primary shrink-0" />
               <input
+                id="palette-search-input"
+                name="palette-search"
+                aria-label="Search anime titles, genres, or series"
                 type="text"
                 autoFocus
                 placeholder="Search anime titles, genres, or series..."

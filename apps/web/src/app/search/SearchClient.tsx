@@ -262,6 +262,9 @@ export function SearchClient() {
         {/* Main Search Input */}
         <div className="relative flex w-full items-center mb-4">
           <input
+            id="anime-search-input"
+            name="anime-search"
+            aria-label="Search anime by title, character, or studio"
             type="text"
             value={query}
             onChange={(e) => {
