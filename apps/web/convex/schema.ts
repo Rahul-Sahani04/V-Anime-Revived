@@ -56,6 +56,7 @@ export default defineSchema({
     lastWatchedAt: v.number(),
   })
     .index("by_user_and_anime_and_episode", ["userId", "anilistId", "episodeNumber"])
+    .index("by_user_and_anime", ["userId", "anilistId"])
     .index("by_user_active", ["userId", "completed"]),
 
   watchHistory: defineTable({

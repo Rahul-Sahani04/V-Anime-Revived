@@ -1,4 +1,38 @@
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "@convex/_generated/api";
 import { AnimeDetailsClient } from "./AnimeDetailsClient";
+import Link from "next/link";
+import { Metadata } from "next";
+
+const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL || "");
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const numId = parseInt(id, 10);
+  if (!numId) return { title: "Anime Not Found | V-Anime Revived" };
+
+  try {
+    const anime = await convex.action(api.anilist.getAnimeDetails, { id: numId });
+    if (!anime) return { title: "Anime | V-Anime Revived" };
+
+    const title = anime.title?.english || anime.title?.romaji || "Anime Details";
+    return {
+      title: `${title} | V-Anime Revived`,
+      description: anime.description || `Stream ${title} on V-Anime Revived in HD with Sub & Dub.`,
+      openGraph: {
+        title: `${title} - V-Anime Revived`,
+        description: anime.description || `Watch ${title} in HD with multi-server playback.`,
+        images: anime.bannerImage ? [anime.bannerImage] : anime.coverImage?.extraLarge ? [anime.coverImage.extraLarge] : [],
+      },
+    };
+  } catch {
+    return { title: "Anime Details | V-Anime Revived" };
+  }
+}
 
 export default async function AnimeDetailsPage({
   params,
@@ -6,22 +40,50 @@ export default async function AnimeDetailsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const numId = parseInt(id, 10);
 
-  // Mock data for anime details
-  const mockAnime = {
-    id,
-    title: id === "16498" ? "Attack on Titan" : id === "21" ? "One Piece" : "Jujutsu Kaisen",
-    description: "A boy swallows a cursed talisman - the finger of a demon - and becomes cursed himself. He enters a shaman's school to be able to locate the demon's other body parts and thus exorcise himself.",
-    posterUrl: id === "16498" ? "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498-73IhOXpJZiMF.jpg" : id === "21" ? "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/nx21-tXMN3Y20PIL9.jpg" : "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-bbBWj4pEFseh.jpg",
-    bannerUrl: id === "16498" ? "https://s4.anilist.co/file/anilistcdn/media/anime/banner/16498-8jpFfDggpHJy.jpg" : "https://s4.anilist.co/file/anilistcdn/media/anime/banner/113415-jQ0PFeWZITiw.jpg",
-    genres: ["Action", "Supernatural", "Shounen", "Fantasy"],
-    status: "FINISHED",
-    episodes: 24,
-    rating: "9.2",
-    year: "2020",
-    studio: "MAPPA",
+  let animeData = null;
+  if (numId) {
+    try {
+      animeData = await convex.action(api.anilist.getAnimeDetails, { id: numId });
+    } catch (err) {
+      console.error(`Failed to fetch anime details for ID ${id}`, err);
+    }
+  }
+
+  if (!animeData) {
+    return (
+      <div className="container mx-auto px-4 py-28 text-center max-w-lg">
+        <div className="rounded-2xl border border-surface-border bg-surface/50 p-8 shadow-2xl">
+          <div className="flex justify-center mb-4 text-3xl">📺</div>
+          <h1 className="text-2xl font-black text-white mb-2">Anime Not Found</h1>
+          <p className="text-xs text-muted mb-6">
+            We couldn&apos;t find anime details for ID #{id}. It may not exist on AniList or the request timed out.
+          </p>
+          <Link
+            href="/"
+            className="inline-flex items-center justify-center px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 shadow-[0_0_15px_rgba(225,29,72,0.4)] transition-all"
+          >
+            Explore Trending
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const formattedAnime = {
+    id: animeData.id.toString(),
+    title: animeData.title?.english || animeData.title?.romaji || "Anime",
+    description: animeData.description || "No synopsis available.",
+    posterUrl: animeData.coverImage?.extraLarge || animeData.coverImage?.large || "",
+    bannerUrl: animeData.bannerImage || animeData.coverImage?.extraLarge || animeData.coverImage?.large || "",
+    genres: animeData.genres || ["Action"],
+    status: animeData.status || "FINISHED",
+    episodes: animeData.episodes || 24,
+    rating: animeData.averageScore ? (animeData.averageScore / 10).toFixed(1) : "9.0",
+    year: animeData.seasonYear?.toString() || "2024",
+    studio: animeData.studio || "Unknown Studio",
   };
 
-  return <AnimeDetailsClient anime={mockAnime} />;
+  return <AnimeDetailsClient anime={formattedAnime} />;
 }
-

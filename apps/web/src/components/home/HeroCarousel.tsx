@@ -2,9 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { motion, AnimatePresence } from "motion/react";
 import { Play, Info, ChevronLeft, ChevronRight, Bookmark, Sparkles } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
 
 export interface FeaturedAnime {
   id: number;
@@ -12,76 +16,77 @@ export interface FeaturedAnime {
   bannerUrl: string;
   posterUrl: string;
   description: string;
-  episodes: number;
-  type: string;
+  episodes?: number;
+  type?: string;
   genres: string[];
-  rating: string;
-  status: string;
+  rating?: string;
+  status?: string;
 }
 
-const FEATURED_ANIME: FeaturedAnime[] = [
+const DEFAULT_FEATURED: FeaturedAnime[] = [
   {
     id: 113415,
     title: "Jujutsu Kaisen",
     bannerUrl: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/113415-jQ0PFeWZITiw.jpg",
     posterUrl: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-bbBWj4pEFseh.jpg",
-    description: "A boy swallows a cursed talisman - the finger of a demon - and becomes cursed himself. He enters a shaman's school to be able to locate the demon's other body parts and exorcise himself.",
+    description: "A boy swallows a cursed talisman - the finger of a demon - and becomes cursed himself. He enters a shaman's school to locate the demon's other body parts and exorcise himself.",
     episodes: 24,
     type: "TV Series",
     genres: ["Action", "Supernatural", "Shounen"],
     rating: "9.2",
-    status: "FINISHED"
+    status: "FINISHED",
   },
   {
     id: 16498,
     title: "Attack on Titan",
     bannerUrl: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/16498-8jpFfDggpHJy.jpg",
     posterUrl: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498-73IhOXpJZiMF.jpg",
-    description: "Centuries ago, mankind was slaughtered by monstrous humanoid creatures called Titans. In the present, young Eren Jaeger vows to cleanse the earth of Titans after witnessing his mother's death.",
+    description: "Centuries ago, mankind was slaughtered by monstrous humanoid creatures called Titans. In the present, young Eren Jaeger vows to cleanse the earth of Titans.",
     episodes: 25,
     type: "TV Series",
     genres: ["Action", "Drama", "Fantasy"],
     rating: "9.5",
-    status: "FINISHED"
+    status: "FINISHED",
   },
   {
     id: 104578,
     title: "Vinland Saga",
     bannerUrl: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/104578-1G5A92zKjXbS.jpg",
     posterUrl: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx104578-LaZYFnmhFvdI.jpg",
-    description: "Young Thorfinn grew up listening to the stories of old sailors that had traveled the ocean and reached the place of legend, Vinland. When tragedy strikes, he embarks on an epic quest of vengeance.",
+    description: "Young Thorfinn grew up listening to the stories of old sailors who reached Vinland. When tragedy strikes, he embarks on an epic quest of vengeance.",
     episodes: 24,
     type: "TV Series",
     genres: ["Action", "Adventure", "Historical"],
     rating: "9.1",
-    status: "FINISHED"
+    status: "FINISHED",
   },
-  {
-    id: 101922,
-    title: "Demon Slayer: Kimetsu no Yaiba",
-    bannerUrl: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/101922-YfZhRmwD2dpn.jpg",
-    posterUrl: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101922-WBsBl0Clmgta.jpg",
-    description: "It is the Taisho Period in Japan. Tanjiro, a kindhearted boy who sells charcoal for a living, finds his family slaughtered by a demon. To make matters worse, his younger sister Nezuko has turned into a demon.",
-    episodes: 26,
-    type: "TV Series",
-    genres: ["Action", "Fantasy", "Historical"],
-    rating: "9.0",
-    status: "FINISHED"
-  }
 ];
 
-export function HeroCarousel() {
+interface HeroCarouselProps {
+  items?: FeaturedAnime[];
+}
+
+export function HeroCarousel({ items }: HeroCarouselProps) {
+  const slides = items && items.length > 0 ? items : DEFAULT_FEATURED;
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const [isBookmarked, setIsBookmarked] = useState(false);
+
+  const { isSignedIn } = useAuth();
+  const currentAnime = slides[currentIndex] || slides[0];
+
+  const userStatus = useQuery(
+    api.library.getAnimeUserStatus,
+    currentAnime?.id ? { anilistId: currentAnime.id } : "skip"
+  );
+  const toggleWatchlistMutation = useMutation(api.library.toggleWatchlist);
 
   const nextSlide = useCallback(() => {
-    setCurrentIndex((prev) => (prev + 1) % FEATURED_ANIME.length);
-  }, []);
+    setCurrentIndex((prev) => (prev + 1) % slides.length);
+  }, [slides.length]);
 
   const prevSlide = useCallback(() => {
-    setCurrentIndex((prev) => (prev - 1 + FEATURED_ANIME.length) % FEATURED_ANIME.length);
-  }, []);
+    setCurrentIndex((prev) => (prev - 1 + slides.length) % slides.length);
+  }, [slides.length]);
 
   // Auto advance every 7 seconds when not hovered
   useEffect(() => {
@@ -90,10 +95,20 @@ export function HeroCarousel() {
     return () => clearInterval(timer);
   }, [isPaused, nextSlide]);
 
-  const currentAnime = FEATURED_ANIME[currentIndex];
+  const router = useRouter();
+
+  const handleToggleWatchlist = async () => {
+    if (!isSignedIn) {
+      router.push(`/sign-in?redirect_url=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+    if (currentAnime?.id) {
+      await toggleWatchlistMutation({ anilistId: currentAnime.id });
+    }
+  };
 
   return (
-    <section 
+    <section
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       className="relative h-[78vh] min-h-[580px] max-h-[820px] w-full overflow-hidden select-none"
@@ -108,14 +123,18 @@ export function HeroCarousel() {
           transition={{ duration: 0.8, ease: "easeInOut" }}
           className="absolute inset-0 z-0"
         >
-          <Image
-            src={currentAnime.bannerUrl}
-            alt={currentAnime.title}
-            fill
-            priority
-            className="object-cover object-top opacity-55 mix-blend-luminosity brightness-95"
-            sizes="100vw"
-          />
+          {currentAnime.bannerUrl ? (
+            <Image
+              src={currentAnime.bannerUrl}
+              alt={currentAnime.title}
+              fill
+              priority
+              className="object-cover object-top opacity-55 mix-blend-luminosity brightness-95"
+              sizes="100vw"
+            />
+          ) : (
+            <div className="h-full w-full bg-surface" />
+          )}
         </motion.div>
       </AnimatePresence>
 
@@ -140,14 +159,18 @@ export function HeroCarousel() {
               Spotlight #{currentIndex + 1}
             </span>
             <span className="rounded-full bg-surface/80 backdrop-blur-md px-3 py-1 text-neutral-300 border border-surface-border">
-              {currentAnime.type}
+              {currentAnime.type || "TV Series"}
             </span>
-            <span className="rounded-full bg-surface/80 backdrop-blur-md px-3 py-1 text-neutral-300 border border-surface-border">
-              {currentAnime.episodes} Episodes
-            </span>
-            <span className="rounded-full bg-surface/80 backdrop-blur-md px-3 py-1 text-primary border border-primary/20 font-mono">
-              ★ {currentAnime.rating}
-            </span>
+            {currentAnime.episodes && (
+              <span className="rounded-full bg-surface/80 backdrop-blur-md px-3 py-1 text-neutral-300 border border-surface-border">
+                {currentAnime.episodes} Episodes
+              </span>
+            )}
+            {currentAnime.rating && (
+              <span className="rounded-full bg-surface/80 backdrop-blur-md px-3 py-1 text-primary border border-primary/20 font-mono">
+                ★ {currentAnime.rating}
+              </span>
+            )}
           </motion.div>
 
           {/* Animated Anime Title */}
@@ -213,15 +236,15 @@ export function HeroCarousel() {
 
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={() => setIsBookmarked(!isBookmarked)}
+              onClick={handleToggleWatchlist}
               className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-all ${
-                isBookmarked
+                userStatus?.isWatchlisted
                   ? "bg-primary/20 border-primary text-primary shadow-[0_0_15px_rgba(225,29,72,0.3)]"
                   : "bg-surface/80 border-surface-border text-muted hover:text-foreground hover:bg-surface-hover"
               }`}
-              title="Bookmark"
+              title="Watchlist"
             >
-              <Bookmark className={`h-4 w-4 ${isBookmarked ? "fill-current" : ""}`} />
+              <Bookmark className={`h-4 w-4 ${userStatus?.isWatchlisted ? "fill-current" : ""}`} />
             </motion.button>
           </motion.div>
         </div>
@@ -229,7 +252,7 @@ export function HeroCarousel() {
         {/* Carousel Navigation Indicators */}
         <div className="absolute right-4 bottom-14 lg:right-8 z-30 flex items-center gap-3">
           <div className="flex items-center gap-1.5 mr-2">
-            {FEATURED_ANIME.map((anime, index) => {
+            {slides.map((anime, index) => {
               const isActive = index === currentIndex;
               return (
                 <button

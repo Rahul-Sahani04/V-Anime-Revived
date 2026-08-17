@@ -34,9 +34,19 @@ This document tracks the overall progress of the V-Anime Revived project.
 - **Anime Details Interactive Actions**:
   - Interactive "Add to Watchlist" and "Favorite" buttons wired directly to reactive Convex mutations with Clerk auth redirect.
 
+- **Live Data Integration (Home & Details Pages)**:
+  - Wired Home page to live AniList/Convex feed (`getHomeFeed`): Spotlight Hero Carousel, Continue Watching shelf (reactive Convex + guest `localStorage`), Trending Now, Popular This Season, and Critically Acclaimed shelves.
+  - Wired Anime Details page (`/anime/[id]`) to live `getAnimeDetails` with dynamic episode count derivation (supporting ongoing airing anime), studio info, synopsis cleaning, and automatic Convex cache updates.
+  - Implemented dynamic OpenGraph SEO metadata across Details (`/anime/[id]`) and Watch (`/anime/[id]/watch/[episode]`) pages.
+
+- **User Library Dashboard (`/library`)**:
+  - Implemented tabbed management interface for Continue Watching, Watchlist, Favorites, and Watch History.
+  - Implemented instant search filter across library items.
+  - Implemented individual card action buttons (Resume, Replay, Dismiss Continue, Remove Watchlist, Remove Favorite, Delete History Entry).
+  - Implemented Clear All Watch History modal with confirmation dialog.
+  - Added guest preview with local storage hydration and Clerk sign-in banner.
+
 ## ⏳ Work In Progress (WIP)
-- **Home Page**: Connect Hero and Anime shelves to live AniList/Convex data instead of static mock arrays.
-- **User Library Page**: Build the dedicated `/library` page (Watchlist, Favorites, History, Continue Watching).
 - **Search Page UI Filters**: Add advanced filters (Season, Year, Format, Status) & pagination.
 - **Loading States**: Add skeleton loaders (`loading.tsx`) and Next.js error boundaries.
 

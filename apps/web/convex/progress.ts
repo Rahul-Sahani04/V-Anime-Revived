@@ -79,6 +79,88 @@ export const updateProgress = mutation({
 });
 
 /**
+ * Dismiss an in-progress anime from "Continue Watching".
+ */
+export const dismissWatchProgress = mutation({
+  args: {
+    anilistId: v.number(),
+    episodeNumber: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getUserId(ctx);
+    if (!userId) return { success: false };
+
+    if (args.episodeNumber !== undefined) {
+      const item = await ctx.db
+        .query("watchProgress")
+        .withIndex("by_user_and_anime_and_episode", (q) =>
+          q
+            .eq("userId", userId)
+            .eq("anilistId", args.anilistId)
+            .eq("episodeNumber", args.episodeNumber!)
+        )
+        .first();
+
+      if (item) {
+        await ctx.db.delete(item._id);
+      }
+    } else {
+      const items = await ctx.db
+        .query("watchProgress")
+        .withIndex("by_user_and_anime", (q) =>
+          q.eq("userId", userId).eq("anilistId", args.anilistId)
+        )
+        .collect();
+
+      for (const it of items) {
+        await ctx.db.delete(it._id);
+      }
+    }
+
+    return { success: true };
+  },
+});
+
+/**
+ * Delete a single history item.
+ */
+export const removeHistoryItem = mutation({
+  args: { historyId: v.id("watchHistory") },
+  handler: async (ctx, args) => {
+    const userId = await getUserId(ctx);
+    if (!userId) return { success: false };
+
+    const item = await ctx.db.get(args.historyId);
+    if (item && item.userId === userId) {
+      await ctx.db.delete(args.historyId);
+    }
+    return { success: true };
+  },
+});
+
+/**
+ * Clear the entire watch history for the user.
+ */
+export const clearWatchHistory = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getUserId(ctx);
+    if (!userId) return { deleted: 0 };
+
+    const history = await ctx.db
+      .query("watchHistory")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+
+    for (const item of history) {
+      await ctx.db.delete(item._id);
+    }
+
+    return { deleted: history.length };
+  },
+});
+
+/**
  * Get saved progress for a specific anime episode.
  */
 export const getAnimeProgress = query({
@@ -118,7 +200,7 @@ export const getContinueWatching = query({
         q.eq("userId", userId).eq("completed", false)
       )
       .order("desc")
-      .take(20);
+      .take(30);
 
     // Hydrate each progress with animeCache metadata
     const hydratedList = await Promise.all(
@@ -130,6 +212,7 @@ export const getContinueWatching = query({
 
         return {
           id: item.anilistId,
+          progressId: item._id,
           title: anime?.title?.english || anime?.title?.romaji || `Anime #${item.anilistId}`,
           posterUrl: anime?.posterUrl || "",
           currentEpisode: item.episodeNumber,
@@ -160,7 +243,7 @@ export const getWatchHistory = query({
       .query("watchHistory")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .order("desc")
-      .take(50);
+      .take(100);
 
     return await Promise.all(
       historyItems.map(async (item) => {
@@ -177,6 +260,7 @@ export const getWatchHistory = query({
           watchedAt: item.watchedAt,
           title: anime?.title?.english || anime?.title?.romaji || `Anime #${item.anilistId}`,
           posterUrl: anime?.posterUrl || "",
+          genre: anime?.genres?.slice(0, 2).join(", ") || "Anime",
         };
       })
     );
