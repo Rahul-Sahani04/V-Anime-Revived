@@ -39,6 +39,9 @@ This document tracks the overall progress of the V-Anime Revived project.
   - Added mobile double-tap to seek (left 40% = -10s, right 40% = +10s).
   - Complete keyboard shortcut engine (Space/K, J/L, Arrows, F, M, S, P) with transient on-screen toast alerts.
   - Automatic timestamp resumption with quick "Restart" trigger.
+  - **Auto-Retry & Server Fallback Engine**:
+    - Automatic 3-stage retry loop with countdown timers on network stalls or backend scraper hiccups.
+    - Intelligent 1-click fallback server switch recommendation (e.g. "Senshi unavailable -> Switch to Anizone ▶") with seamless state preservation.
 - **Anime Details Interactive Actions**:
   - Interactive "Add to Watchlist" and "Favorite" buttons wired directly to reactive Convex mutations with Clerk auth redirect.
 

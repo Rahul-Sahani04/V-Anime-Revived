@@ -6,6 +6,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { saveGuestProgress, getGuestProgress } from "@/lib/guestProgress";
+import Link from "next/link";
 import {
   Play,
   Pause,
@@ -21,6 +22,9 @@ import {
   Sparkles,
   X,
   Loader2,
+  RefreshCw,
+  AlertTriangle,
+  ArrowRight,
 } from "lucide-react";
 
 interface AniSkipInterval {
@@ -234,11 +238,20 @@ export function VideoPlayer({
     }
   }, [isSignedIn, numAnimeId, numEpisode, serverProgress]);
 
+  // Auto-retry & Fallback state
+  const [retryAttempt, setRetryAttempt] = useState(0);
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
+  const [retryTrigger, setRetryTrigger] = useState(0);
+
+  const ALL_SERVERS = ["senshi", "anizone", "anikoto", "miruro", "anineko", "reanime", "animeheaven"];
+  const nextFallbackServer = ALL_SERVERS.find((s) => s !== server) || "anizone";
+
   // Main Stream Fetch & HLS Setup
   useEffect(() => {
     let isCancelled = false;
     const abortController = new AbortController();
     let hls: Hls | null = null;
+    let countdownInterval: NodeJS.Timeout | null = null;
     const video = videoRef.current;
     if (!video) return;
 
@@ -259,18 +272,22 @@ export function VideoPlayer({
         if (isCancelled) return;
 
         if (!res.ok) {
-          throw new Error("Failed to resolve stream URL from API");
+          throw new Error(`Server returned HTTP ${res.status}`);
         }
 
         const { data } = await res.json();
         if (isCancelled) return;
 
         const streamUrl =
-          data.hlsProxyUrl || data.m3u8 || data.mp4ProxyUrl || data.mp4 || data.streamUrl;
+          data?.hlsProxyUrl || data?.m3u8 || data?.mp4ProxyUrl || data?.mp4 || data?.streamUrl;
 
         if (!streamUrl) {
           throw new Error("No playable stream URL returned for this server.");
         }
+
+        // Successfully found stream: reset retry counter
+        setRetryAttempt(0);
+        setRetryCountdown(null);
 
         if (Hls.isSupported()) {
           hls = new Hls({
@@ -299,14 +316,16 @@ export function VideoPlayer({
             if (data.fatal) {
               switch (data.type) {
                 case Hls.ErrorTypes.NETWORK_ERROR:
+                  console.warn("HLS network error, attempting reload...");
                   hls?.startLoad();
                   break;
                 case Hls.ErrorTypes.MEDIA_ERROR:
+                  console.warn("HLS media error, recovering...");
                   hls?.recoverMediaError();
                   break;
                 default:
                   hls?.destroy();
-                  setError("A fatal playback error occurred. Please try a different server.");
+                  setError("Fatal stream decoding error. Try switching servers.");
                   setIsLoading(false);
                   break;
               }
@@ -328,10 +347,35 @@ export function VideoPlayer({
         if (isCancelled || (err instanceof DOMException && err.name === "AbortError")) {
           return;
         }
-        console.error("Stream fetch error:", err);
-        const message = err instanceof Error ? err.message : "Failed to load video stream.";
-        setError(message);
-        setIsLoading(false);
+
+        console.error(`[VideoPlayer Error] Server ${server} fetch attempt failed:`, err);
+
+        // Auto-retry up to 3 times
+        if (retryAttempt < 2) {
+          const nextAttemptNum = retryAttempt + 1;
+          const waitSecs = nextAttemptNum * 2;
+          setRetryCountdown(waitSecs);
+          setIsLoading(true);
+
+          let remaining = waitSecs;
+          countdownInterval = setInterval(() => {
+            remaining -= 1;
+            if (remaining <= 0) {
+              if (countdownInterval) clearInterval(countdownInterval);
+              if (!isCancelled) {
+                setRetryCountdown(null);
+                setRetryAttempt(nextAttemptNum);
+                setRetryTrigger((prev) => prev + 1);
+              }
+            } else {
+              setRetryCountdown(remaining);
+            }
+          }, 1000);
+        } else {
+          // All 3 attempts exhausted
+          setError(`Server "${server}" is currently unresponsive.`);
+          setIsLoading(false);
+        }
       }
     };
 
@@ -340,6 +384,7 @@ export function VideoPlayer({
     return () => {
       isCancelled = true;
       abortController.abort();
+      if (countdownInterval) clearInterval(countdownInterval);
       if (hls) {
         hls.stopLoad();
         hls.detachMedia();
@@ -352,7 +397,7 @@ export function VideoPlayer({
         video.load();
       }
     };
-  }, [animeId, episode, server, type, autoplay]);
+  }, [animeId, episode, server, type, autoplay, retryTrigger]);
 
   // Video Event Listeners (Syncing State)
   const handleTimeUpdate = () => {
@@ -696,28 +741,73 @@ export function VideoPlayer({
         onClick={handleTouchScreen}
       />
 
-      {/* Loading Overlay */}
-      {isLoading && !error && (
+      {/* Auto-Retry Loading Countdown Overlay */}
+      {retryCountdown !== null && !error && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md z-30 animate-in fade-in duration-200">
+          <div className="relative flex items-center justify-center mb-3">
+            <Loader2 className="h-12 w-12 animate-spin text-primary drop-shadow-[0_0_15px_rgba(225,29,72,0.6)]" />
+            <span className="absolute text-xs font-mono font-black text-white">{retryCountdown}s</span>
+          </div>
+          <span className="text-xs font-extrabold text-white tracking-wider uppercase">
+            Connecting Stream (Attempt {retryAttempt + 1}/3)
+          </span>
+          <span className="mt-1 text-[11px] text-neutral-400">
+            Auto-retrying in {retryCountdown}s...
+          </span>
+          <button
+            onClick={() => {
+              setRetryCountdown(null);
+              setRetryAttempt((prev) => prev + 1);
+              setRetryTrigger((prev) => prev + 1);
+            }}
+            className="mt-3 text-[11px] font-bold text-primary hover:underline"
+          >
+            Retry Now
+          </button>
+        </div>
+      )}
+
+      {/* Standard Initial Loading Overlay */}
+      {isLoading && retryCountdown === null && !error && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm z-30 pointer-events-none">
           <Loader2 className="h-12 w-12 animate-spin text-primary drop-shadow-[0_0_15px_rgba(225,29,72,0.6)]" />
           <span className="mt-3 text-xs font-bold text-neutral-300 tracking-wider uppercase">Loading Stream...</span>
         </div>
       )}
 
-      {/* Playback Error Overlay */}
+      {/* Playback Error & Server Fallback Overlay */}
       {error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/95 p-6 text-center z-40">
-          <div className="rounded-2xl bg-primary/15 p-4 mb-3 border border-primary/30 text-primary">
-            <X className="h-8 w-8" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/95 p-6 text-center z-40 animate-in fade-in duration-200">
+          <div className="rounded-2xl bg-rose-500/15 p-4 mb-3 border border-rose-500/30 text-rose-500">
+            <AlertTriangle className="h-8 w-8" />
           </div>
-          <p className="text-base font-bold text-white">Playback Error</p>
-          <p className="mt-1 text-xs text-neutral-400 max-w-md leading-relaxed">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-5 rounded-xl bg-primary px-6 py-2.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 transition-all shadow-[0_0_15px_rgba(225,29,72,0.4)]"
-          >
-            Retry Stream
-          </button>
+          <p className="text-base font-black text-white capitalize">
+            Server &quot;{server}&quot; Unavailable
+          </p>
+          <p className="mt-1 text-xs text-neutral-400 max-w-md leading-relaxed">
+            We couldn&apos;t establish a stable stream on server &quot;{server}&quot; after 3 attempts. Switch to a fast fallback server or retry.
+          </p>
+
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href={`/anime/${animeId}/watch/${episode}?server=${nextFallbackServer}&type=${type}`}
+              className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 transition-all shadow-[0_0_15px_rgba(225,29,72,0.4)] capitalize"
+            >
+              <span>Switch to {nextFallbackServer}</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+
+            <button
+              onClick={() => {
+                setRetryAttempt(0);
+                setRetryTrigger((prev) => prev + 1);
+              }}
+              className="flex items-center gap-1.5 rounded-xl bg-surface hover:bg-surface-hover px-4 py-2.5 text-xs font-bold text-neutral-200 border border-surface-border transition-colors"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span>Retry {server}</span>
+            </button>
+          </div>
         </div>
       )}
 
