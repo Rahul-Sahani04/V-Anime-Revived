@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { VideoPlayer } from "@/components/player/VideoPlayer";
 import { useAuth } from "@clerk/nextjs";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { getAllGuestProgress, clearGuestProgress } from "@/lib/guestProgress";
 import {
@@ -53,6 +53,7 @@ export function WatchPlayerClient({
   const toggleFavoriteMutation = useMutation(api.library.toggleFavorite);
   const toggleWatchlistMutation = useMutation(api.library.toggleWatchlist);
   const syncGuestProgressMutation = useMutation(api.progress.syncGuestProgress);
+  const syncAniListAction = useAction(api.anilistSync.syncEpisodeProgressToAniList);
 
   // Sync guest progress to Convex on login
   useEffect(() => {
@@ -87,6 +88,17 @@ export function WatchPlayerClient({
   }, [countdown, animeId, nextEp, server, type, router]);
 
   const handleEpisodeEnd = () => {
+    // Automatically push episode progress to AniList if linked
+    if (isSignedIn && numAnimeId > 0) {
+      syncAniListAction({
+        anilistId: numAnimeId,
+        episodeNumber: currentEpNum,
+        completed: true,
+      }).catch((err) => {
+        console.error("AniList sync error:", err);
+      });
+    }
+
     // Start 5-second countdown to next episode
     setCountdown(5);
   };

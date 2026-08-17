@@ -25,6 +25,38 @@ import { Id } from "@convex/_generated/dataModel";
 
 type LibraryTab = "continue" | "watchlist" | "favorites" | "history";
 
+interface LibraryProgressItem {
+  id: number;
+  anilistId?: number;
+  progressId?: Id<"watchProgress">;
+  title: string;
+  posterUrl: string;
+  currentEpisode: number;
+  progressPercentage: number;
+  lastWatchedAt: number;
+}
+
+interface LibraryMediaItem {
+  id: number;
+  title: string;
+  posterUrl: string;
+  genres: string[];
+  episodes?: number;
+  status?: string;
+}
+
+interface LibraryHistoryItem {
+  historyId: Id<"watchHistory">;
+  id: number;
+  title: string;
+  posterUrl: string;
+  episodeNumber: number;
+  server: string;
+  watchedAt: number;
+}
+
+type ContinueWatchItem = LibraryProgressItem | GuestProgressItem;
+
 export function LibraryClient() {
   const router = useRouter();
   const { isSignedIn, isLoaded } = useAuth();
@@ -60,10 +92,12 @@ export function LibraryClient() {
   const removeHistoryItemMutation = useMutation(api.progress.removeHistoryItem);
   const clearHistoryMutation = useMutation(api.progress.clearWatchHistory);
 
-  const activeContinueWatching = isSignedIn ? continueWatching || [] : guestProgress.filter((i) => !i.completed);
-  const favorites = isSignedIn ? libraryData?.favorites || [] : [];
-  const watchlist = isSignedIn ? libraryData?.watchlist || [] : [];
-  const history = isSignedIn ? watchHistory || [] : [];
+  const activeContinueWatching: ContinueWatchItem[] = isSignedIn
+    ? (continueWatching as LibraryProgressItem[]) || []
+    : guestProgress.filter((i) => !i.completed);
+  const favorites: LibraryMediaItem[] = isSignedIn ? (libraryData?.favorites as LibraryMediaItem[]) || [] : [];
+  const watchlist: LibraryMediaItem[] = isSignedIn ? (libraryData?.watchlist as LibraryMediaItem[]) || [] : [];
+  const history: LibraryHistoryItem[] = isSignedIn ? (watchHistory as LibraryHistoryItem[]) || [] : [];
 
   const handleDismissContinue = async (anilistId: number, episodeNumber?: number) => {
     if (isSignedIn) {
@@ -295,11 +329,11 @@ export function LibraryClient() {
             ) : (
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
                 {activeContinueWatching
-                  .filter((item) => {
+                  .filter((item: ContinueWatchItem) => {
                     const title = "title" in item ? item.title : `Anime #${item.anilistId}`;
                     return title.toLowerCase().includes(searchQuery.toLowerCase());
                   })
-                  .map((item) => {
+                  .map((item: ContinueWatchItem) => {
                     const title = "title" in item ? item.title : `Anime #${item.anilistId}`;
                     const posterUrl = "posterUrl" in item ? item.posterUrl : "";
                     const ep = "currentEpisode" in item ? item.currentEpisode : item.episodeNumber;
@@ -404,8 +438,8 @@ export function LibraryClient() {
             ) : (
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
                 {watchlist
-                  .filter((item) => item.title.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((item) => (
+                  .filter((item: LibraryMediaItem) => item.title.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map((item: LibraryMediaItem) => (
                     <div key={item.id} className="group relative flex flex-col">
                       <div className="relative aspect-[2/3] w-full overflow-hidden rounded-xl border border-surface-border bg-surface shadow-md">
                         {item.posterUrl ? (
@@ -490,8 +524,8 @@ export function LibraryClient() {
             ) : (
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
                 {favorites
-                  .filter((item) => item.title.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((item) => (
+                  .filter((item: LibraryMediaItem) => item.title.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map((item: LibraryMediaItem) => (
                     <div key={item.id} className="group relative flex flex-col">
                       <div className="relative aspect-[2/3] w-full overflow-hidden rounded-xl border border-surface-border bg-surface shadow-md">
                         {item.posterUrl ? (
@@ -576,8 +610,8 @@ export function LibraryClient() {
             ) : (
               <div className="flex flex-col gap-3">
                 {history
-                  .filter((item) => item.title.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((item) => (
+                  .filter((item: LibraryHistoryItem) => item.title.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map((item: LibraryHistoryItem) => (
                     <div
                       key={item.historyId}
                       className="group flex items-center justify-between gap-4 rounded-xl border border-surface-border bg-surface/60 p-3.5 hover:bg-surface hover:border-surface-border/80 transition-all"

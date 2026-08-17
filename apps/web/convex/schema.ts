@@ -66,4 +66,14 @@ export default defineSchema({
     server: v.string(),
     watchedAt: v.number(),
   }).index("by_userId", ["userId"]),
+
+  anilistAccounts: defineTable({
+    userId: v.string(),
+    anilistUserId: v.number(),
+    anilistUsername: v.string(),
+    anilistAvatar: v.optional(v.string()),
+    accessToken: v.string(),
+    autoSyncProgress: v.boolean(),
+    lastSyncedAt: v.optional(v.number()),
+  }).index("by_userId", ["userId"]),
 });

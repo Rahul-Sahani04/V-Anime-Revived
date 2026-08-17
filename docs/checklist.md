@@ -60,14 +60,15 @@ This document tracks the overall progress of the V-Anime Revived project.
 - **User Profiles & Playback Preferences (`/profile`)**:
   - Implemented `getUserStats` in Convex to calculate lifetime watched episodes, total hours streamed, watchlist count, and milestone badges (e.g., "Otaku Master 👑", "Binge Watcher 🍿").
   - Implemented `/profile` dashboard allowing users to configure default audio tracks (Subbed JP vs Dubbed EN), preferred video servers (Senshi, Anikoto, Miruro, etc.), Autoplay, and Auto-Next triggers with instant optimistic saving and toast alerts.
-  - Linked Profile route to top navigation bar and mobile drawer.
+- **AniList OAuth & Watchlist Synchronization**:
+  - Configured OAuth API Client (`48831`) with 1-Click implicit authorization and auto-token URL hash reader.
+  - Implemented `connectAniListToken`, `disconnectAniListAccount`, `toggleAutoSync`, `importAniListCollection`, and `syncEpisodeProgressToAniList` in Convex.
+  - Implemented bi-directional synchronization: One-click collection import (Current, Planning, Completed) into V-Anime Watchlist and automatic episode push updates to AniList on playback completion.
 
 ## ⏳ Work In Progress (WIP)
 - **Social Features**: Comment sections under episodes, episode ratings, and user reviews.
 
 ## 🛑 Haven't Started
-- **Social Features**: Comment sections under episodes, ratings, and user reviews.
-- **AniList Syncing**: Allowing users to connect their AniList account via OAuth to sync their watchlist automatically.
 - **Notifications**: Alerts for when a new episode of a favorited anime drops.
 - **Admin Dashboard**: A hidden route for managing site analytics or featured shows.
 - **SEO & Meta Tags**: OpenGraph tags, dynamic sitemaps, and indexing optimizations for search engines.

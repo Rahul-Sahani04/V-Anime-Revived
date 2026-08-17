@@ -7,6 +7,20 @@ import { api } from "@convex/_generated/api";
 import { AnimeCard } from "@/components/ui/AnimeCard";
 import { getAllGuestProgress, GuestProgressItem } from "@/lib/guestProgress";
 import { Play } from "lucide-react";
+import { Id } from "@convex/_generated/dataModel";
+
+interface ServerProgressItem {
+  id: number;
+  anilistId?: number;
+  progressId?: Id<"watchProgress">;
+  title: string;
+  posterUrl: string;
+  currentEpisode: number;
+  progressPercentage: number;
+  lastWatchedAt: number;
+}
+
+type ContinueItem = ServerProgressItem | GuestProgressItem;
 
 export function ContinueWatchingShelf() {
   const { isSignedIn } = useAuth();
@@ -21,7 +35,7 @@ export function ContinueWatchingShelf() {
   });
 
   // If signed in, use server items; else use guest items
-  const items = isSignedIn ? serverProgress || [] : guestItems;
+  const items: ContinueItem[] = isSignedIn ? (serverProgress as ServerProgressItem[]) || [] : guestItems;
 
   if (!items || items.length === 0) {
     return null;
@@ -44,7 +58,7 @@ export function ContinueWatchingShelf() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-        {items.map((anime) => {
+        {items.map((anime: ContinueItem) => {
           // If server progress item, title & posterUrl are hydrated
           const title = "title" in anime ? anime.title : `Anime #${anime.anilistId}`;
           const posterUrl = "posterUrl" in anime ? anime.posterUrl : "";

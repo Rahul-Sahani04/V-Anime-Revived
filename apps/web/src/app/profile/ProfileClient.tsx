@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth, useUser, SignOutButton } from "@clerk/nextjs";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@convex/_generated/api";
 import {
   Tv,
@@ -22,6 +22,12 @@ import {
   ArrowRight,
   Settings,
   LogOut,
+  RefreshCw,
+  Unlink,
+  ExternalLink,
+  ShieldCheck,
+  X,
+  Loader2,
 } from "lucide-react";
 
 const AVAILABLE_SERVERS = [
@@ -42,9 +48,14 @@ export function ProfileClient() {
   // Convex Queries
   const preferences = useQuery(api.preferences.getUserPreferences);
   const stats = useQuery(api.preferences.getUserStats);
+  const anilistAccount = useQuery(api.anilistSync.getAniListAccount);
 
-  // Convex Mutation
+  // Convex Mutations & Actions
   const updatePreferencesMutation = useMutation(api.preferences.updateUserPreferences);
+  const connectTokenAction = useAction(api.anilistSync.connectAniListToken);
+  const disconnectMutation = useMutation(api.anilistSync.disconnectAniListAccount);
+  const toggleAutoSyncMutation = useMutation(api.anilistSync.toggleAutoSync);
+  const importCollectionAction = useAction(api.anilistSync.importAniListCollection);
 
   // Optimistic local override states
   const [localLanguage, setLocalLanguage] = useState<string | null>(null);
@@ -52,6 +63,14 @@ export function ProfileClient() {
   const [localAutoplay, setLocalAutoplay] = useState<boolean | null>(null);
   const [localAutoNext, setLocalAutoNext] = useState<boolean | null>(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
+
+  // AniList Connection Modal State
+  const [showTokenDialog, setShowTokenDialog] = useState(false);
+  const [tokenInput, setTokenInput] = useState("");
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importSummary, setImportSummary] = useState<{ totalImported: number } | null>(null);
 
   const preferredLanguage = localLanguage ?? preferences?.preferredLanguage ?? "sub";
   const preferredServer = localServer ?? preferences?.preferredServer ?? "senshi";
@@ -99,6 +118,75 @@ export function ProfileClient() {
     }
   };
 
+  // Auto-connect if URL contains AniList OAuth token in hash (e.g. #access_token=eyJ...)
+  useEffect(() => {
+    if (typeof window === "undefined" || !isSignedIn) return;
+    const hash = window.location.hash;
+    if (hash && hash.includes("access_token=")) {
+      const match = hash.match(/access_token=([^&]+)/);
+      if (match && match[1]) {
+        const token = decodeURIComponent(match[1]);
+        window.history.replaceState(null, "", window.location.pathname);
+        connectTokenAction({ accessToken: token })
+          .then(() => {
+            triggerToast();
+          })
+          .catch((err) => {
+            console.error("Auto-connect AniList failed:", err);
+          });
+      }
+    }
+  }, [isSignedIn, connectTokenAction]);
+
+  // AniList Connect Handler
+  const handleConnectAniList = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tokenInput.trim()) return;
+
+    setIsConnecting(true);
+    setConnectError(null);
+    try {
+      await connectTokenAction({ accessToken: tokenInput.trim() });
+      setShowTokenDialog(false);
+      setTokenInput("");
+      triggerToast();
+    } catch (err: unknown) {
+      setConnectError(err instanceof Error ? err.message : "Failed to connect to AniList");
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  // AniList Import Handler
+  const handleImportCollection = async () => {
+    setIsImporting(true);
+    try {
+      const result = await importCollectionAction({});
+      setImportSummary({ totalImported: result.totalImported });
+    } catch (err) {
+      console.error("AniList import error:", err);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  // AniList AutoSync Toggle Handler
+  const handleToggleAniListAutoSync = async () => {
+    if (!anilistAccount) return;
+    await toggleAutoSyncMutation({
+      autoSyncProgress: !anilistAccount.autoSyncProgress,
+    });
+    triggerToast();
+  };
+
+  // AniList Disconnect Handler
+  const handleDisconnectAniList = async () => {
+    if (confirm("Are you sure you want to disconnect your AniList account?")) {
+      await disconnectMutation({});
+      triggerToast();
+    }
+  };
+
   if (isLoaded && !isSignedIn) {
     return (
       <div className="container mx-auto px-4 py-20 text-center max-w-lg">
@@ -108,7 +196,7 @@ export function ProfileClient() {
           </div>
           <h2 className="text-2xl font-black text-white mb-2">Account Required</h2>
           <p className="text-xs sm:text-sm text-muted mb-6 leading-relaxed">
-            Please sign in to view your profile, track lifetime anime streaming statistics, and customize default playback servers.
+            Please sign in to view your profile, track lifetime anime streaming statistics, sync AniList watchlists, and customize default playback servers.
           </p>
           <button
             onClick={() => router.push(`/sign-in?redirect_url=${encodeURIComponent(window.location.pathname)}`)}
@@ -223,6 +311,103 @@ export function ProfileClient() {
               {stats?.totalFavorites || 0}
             </span>
           </Link>
+        </div>
+      </div>
+
+      {/* AniList Integration Card */}
+      <div className="mb-10">
+        <div className="flex items-center gap-2 mb-4">
+          <ShieldCheck className="h-4 w-4 text-[#02a9ff]" />
+          <h2 className="text-xs font-bold uppercase tracking-wider text-muted">
+            AniList Account Synchronization
+          </h2>
+        </div>
+
+        <div className="rounded-2xl border border-[#02a9ff]/25 bg-surface/70 backdrop-blur-xl p-6 shadow-xl">
+          {anilistAccount ? (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                {anilistAccount.anilistAvatar ? (
+                  <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-[#02a9ff]/50">
+                    <Image
+                      src={anilistAccount.anilistAvatar}
+                      alt={anilistAccount.anilistUsername}
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#02a9ff]/20 text-[#02a9ff] font-bold text-xl">
+                    AL
+                  </div>
+                )}
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-bold text-white">
+                      @{anilistAccount.anilistUsername}
+                    </span>
+                    <span className="rounded-full bg-[#02a9ff]/20 text-[#02a9ff] border border-[#02a9ff]/40 px-2 py-0.5 text-[10px] font-bold">
+                      Synced
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted mt-0.5">
+                    {anilistAccount.lastSyncedAt
+                      ? `Last synced ${new Date(anilistAccount.lastSyncedAt).toLocaleDateString()}`
+                      : "Ready to sync"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={handleImportCollection}
+                  disabled={isImporting}
+                  className="flex items-center gap-2 rounded-xl bg-[#02a9ff] hover:bg-[#02a9ff]/90 px-4 py-2 text-xs font-bold text-white transition-all shadow-[0_0_15px_rgba(2,169,255,0.35)] disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isImporting ? "animate-spin" : ""}`} />
+                  <span>{isImporting ? "Importing..." : "Sync Watchlist Now"}</span>
+                </button>
+
+                <button
+                  onClick={handleToggleAniListAutoSync}
+                  className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                    anilistAccount.autoSyncProgress
+                      ? "bg-[#02a9ff]/15 border-[#02a9ff]/40 text-[#02a9ff]"
+                      : "bg-surface border-surface-border text-muted hover:text-white"
+                  }`}
+                >
+                  <span>Auto-Push Episodes: {anilistAccount.autoSyncProgress ? "ON" : "OFF"}</span>
+                </button>
+
+                <button
+                  onClick={handleDisconnectAniList}
+                  className="flex items-center gap-1.5 rounded-xl bg-surface hover:bg-surface-hover text-muted hover:text-rose-400 border border-surface-border px-3 py-2 text-xs font-semibold transition-colors"
+                  title="Disconnect AniList"
+                >
+                  <Unlink className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+              <div className="max-w-xl">
+                <h3 className="text-base font-bold text-white mb-1">
+                  Connect your AniList Account
+                </h3>
+                <p className="text-xs text-muted leading-relaxed">
+                  Seamlessly import your planning and watching lists from AniList, and automatically sync episode progress in real-time as you stream on V-Anime.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowTokenDialog(true)}
+                className="flex items-center gap-2 rounded-xl bg-[#02a9ff] hover:bg-[#02a9ff]/90 px-5 py-2.5 text-xs font-bold text-white transition-all shadow-[0_0_15px_rgba(2,169,255,0.35)] shrink-0"
+              >
+                <span>Connect AniList</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -372,6 +557,147 @@ export function ProfileClient() {
           </div>
         </div>
       </div>
+
+      {/* AniList Connection Dialog Modal */}
+      <AnimatePresence>
+        {showTokenDialog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowTokenDialog(false)}
+              className="fixed inset-0 bg-background/80 backdrop-blur-md"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative w-full max-w-md overflow-hidden rounded-2xl border border-surface-border bg-surface p-6 shadow-2xl shadow-black z-10"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#02a9ff]/20 text-[#02a9ff] font-bold text-sm">
+                    AL
+                  </div>
+                  <h3 className="text-base font-bold text-white">Connect AniList Account</h3>
+                </div>
+                <button
+                  onClick={() => setShowTokenDialog(false)}
+                  className="rounded-lg p-1 text-muted hover:bg-surface-hover hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* 1-Click OAuth Authorize Button */}
+                <div className="rounded-xl bg-[#02a9ff]/10 border border-[#02a9ff]/30 p-4 text-center space-y-3">
+                  <p className="text-xs text-neutral-200 leading-relaxed">
+                    Authorize V-Anime using your configured AniList Client (ID: <code className="text-[#02a9ff] font-mono">48831</code>):
+                  </p>
+                  <a
+                    href="https://anilist.co/api/v2/oauth/authorize?client_id=48831&response_type=token"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#02a9ff] hover:bg-[#02a9ff]/90 px-6 py-2.5 text-xs font-bold text-white shadow-[0_0_15px_rgba(2,169,255,0.4)] transition-all w-full"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    <span>1-Click Authorize with AniList</span>
+                  </a>
+                </div>
+
+                <div className="flex items-center gap-2 text-[10px] text-muted justify-center">
+                  <span className="h-px flex-1 bg-surface-border" />
+                  <span>OR PASTE TOKEN / REDIRECT URL</span>
+                  <span className="h-px flex-1 bg-surface-border" />
+                </div>
+
+                <form onSubmit={handleConnectAniList} className="space-y-4">
+                  <div>
+                    <label
+                      htmlFor="anilist-token-input"
+                      className="text-[11px] font-bold uppercase tracking-wider text-muted mb-1.5 block"
+                    >
+                      AniList Access Token or Redirect URL
+                    </label>
+                    <input
+                      id="anilist-token-input"
+                      name="anilist-token"
+                      aria-label="AniList Access Token"
+                      type="password"
+                      value={tokenInput}
+                      onChange={(e) => setTokenInput(e.target.value)}
+                      placeholder="Paste access token (eyJ...) or full redirect URL..."
+                      className="w-full rounded-xl border border-surface-border bg-surface-hover px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted focus:border-[#02a9ff] focus:outline-none font-mono"
+                    />
+                  </div>
+
+                  {connectError && (
+                    <p className="text-xs text-rose-400 font-medium">{connectError}</p>
+                  )}
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowTokenDialog(false)}
+                      className="rounded-xl border border-surface-border px-4 py-2 text-xs font-semibold text-muted hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isConnecting || !tokenInput.trim()}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#02a9ff] hover:bg-[#02a9ff]/90 px-4 py-2 text-xs font-bold text-white transition-all disabled:opacity-50"
+                    >
+                      {isConnecting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      <span>{isConnecting ? "Verifying..." : "Connect"}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Sync Complete Summary Modal */}
+      <AnimatePresence>
+        {importSummary && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setImportSummary(null)}
+              className="fixed inset-0 bg-background/80 backdrop-blur-md"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-sm rounded-2xl border border-surface-border bg-surface p-6 text-center shadow-2xl z-10"
+            >
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#02a9ff]/20 text-[#02a9ff] border border-[#02a9ff]/40 mb-3">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <h3 className="text-base font-bold text-white mb-1">AniList Sync Complete!</h3>
+              <p className="text-xs text-muted mb-4">
+                Successfully imported and synchronized <span className="font-bold text-white">{importSummary.totalImported} anime titles</span> into your V-Anime Watchlist.
+              </p>
+              <button
+                onClick={() => {
+                  setImportSummary(null);
+                  router.push("/library");
+                }}
+                className="w-full rounded-xl bg-[#02a9ff] py-2.5 text-xs font-bold text-white hover:bg-[#02a9ff]/90 transition-all shadow-[0_0_12px_rgba(2,169,255,0.4)]"
+              >
+                Go to My Library
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Auto-Saved Floating Toast Notification */}
       <AnimatePresence>
