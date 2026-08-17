@@ -29,6 +29,10 @@ export default defineSchema({
     genres: v.array(v.string()),
     episodes: v.optional(v.number()),
     status: v.optional(v.string()),
+    averageScore: v.optional(v.number()),
+    year: v.optional(v.number()),
+    studio: v.optional(v.string()),
+    format: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_anilistId", ["anilistId"]),
 

@@ -279,14 +279,44 @@ export const getTrending = action({
 export const getAnimeDetails = action({
   args: { id: v.number() },
   handler: async (ctx, args): Promise<any> => {
+    // 1. Instant Cache-First Hit: check Convex Database cache first (0ms latency, zero AniList rate limits)
+    const cached = await ctx.runQuery(internal.anilist.getInternalCachedAnime, {
+      anilistId: args.id,
+    });
+
+    const isFresh = cached && Date.now() - cached.updatedAt < 1000 * 60 * 60 * 24; // 24 hours
+    if (cached && (isFresh || cached.status === "FINISHED")) {
+      return {
+        id: cached.anilistId,
+        title: cached.title,
+        description: cached.description || "",
+        coverImage: {
+          extraLarge: cached.posterUrl,
+          large: cached.posterUrl,
+        },
+        bannerImage: cached.bannerUrl,
+        genres: cached.genres || [],
+        status: cached.status || "FINISHED",
+        episodes: cached.episodes || 24,
+        averageScore: cached.averageScore || 85,
+        seasonYear: cached.year || 2024,
+        studio: cached.studio || "Animation Studio",
+        format: cached.format || "TV",
+        relations: [],
+      };
+    }
+
+    // 2. Fetch from AniList if cache is missing or stale
     let response: Response | null = null;
     let attempts = 0;
-    const maxAttempts = 3;
+    const maxAttempts = 2;
 
-    // Retry loop with backoff for rate limits (429) and network blips
     while (attempts < maxAttempts) {
       attempts++;
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+
         response = await fetch(ANILIST_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -294,22 +324,23 @@ export const getAnimeDetails = action({
             query: INFO_QUERY,
             variables: { id: args.id },
           }),
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         if (response.ok) {
           break;
         }
 
-        // If rate-limited or AniList server error, back off and retry
         if (response.status === 429 || response.status >= 500) {
           if (attempts < maxAttempts) {
-            await new Promise((resolve) => setTimeout(resolve, 600 * attempts));
+            await new Promise((resolve) => setTimeout(resolve, 400));
             continue;
           }
         }
       } catch {
         if (attempts < maxAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, 600 * attempts));
+          await new Promise((resolve) => setTimeout(resolve, 400));
           continue;
         }
       }
@@ -342,6 +373,10 @@ export const getAnimeDetails = action({
             genres: media.genres || [],
             episodes: derivedEpisodes,
             status: media.status,
+            averageScore: media.averageScore,
+            year: media.seasonYear,
+            studio: studioName,
+            format: media.format,
           });
 
           return {
@@ -356,11 +391,7 @@ export const getAnimeDetails = action({
       }
     }
 
-    // Fallback to Convex database cache if AniList is rate limiting or unavailable
-    const cached = await ctx.runQuery(internal.anilist.getInternalCachedAnime, {
-      anilistId: args.id,
-    });
-
+    // 3. Fallback to cached database record if AniList was unreachable
     if (cached) {
       return {
         id: cached.anilistId,
@@ -374,8 +405,10 @@ export const getAnimeDetails = action({
         genres: cached.genres || [],
         status: cached.status || "FINISHED",
         episodes: cached.episodes || 24,
-        averageScore: 85,
-        studio: "Anime Studio",
+        averageScore: cached.averageScore || 85,
+        seasonYear: cached.year || 2024,
+        studio: cached.studio || "Unknown Studio",
+        format: cached.format || "TV",
         relations: [],
       };
     }
@@ -419,6 +452,10 @@ export const cacheAnime = internalMutation({
     genres: v.array(v.string()),
     episodes: v.optional(v.number()),
     status: v.optional(v.string()),
+    averageScore: v.optional(v.number()),
+    year: v.optional(v.number()),
+    studio: v.optional(v.string()),
+    format: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db

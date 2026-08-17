@@ -262,12 +262,20 @@ export function VideoPlayer({
     lastSavedTime.current = 0;
 
     const fetchAndPlay = async () => {
+      let fetchTimeout: NodeJS.Timeout | null = null;
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+        
+        // 5.5s timeout for scraper responsiveness
+        fetchTimeout = setTimeout(() => {
+          if (!isCancelled) abortController.abort();
+        }, 5500);
+
         const res = await fetch(
           `${apiUrl}/api/anime/${animeId}/episodes/${episode}/watch?server=${server}&type=${type}`,
           { signal: abortController.signal }
         );
+        if (fetchTimeout) clearTimeout(fetchTimeout);
 
         if (isCancelled) return;
 
@@ -344,16 +352,17 @@ export function VideoPlayer({
           setIsLoading(false);
         }
       } catch (err: unknown) {
-        if (isCancelled || (err instanceof DOMException && err.name === "AbortError")) {
+        if (fetchTimeout) clearTimeout(fetchTimeout);
+        if (isCancelled || (err instanceof DOMException && err.name === "AbortError" && !isLoading)) {
           return;
         }
 
         console.error(`[VideoPlayer Error] Server ${server} fetch attempt failed:`, err);
 
-        // Auto-retry up to 3 times
+        // Fast auto-retry (up to 2 retries, 1.5s countdown each)
         if (retryAttempt < 2) {
           const nextAttemptNum = retryAttempt + 1;
-          const waitSecs = nextAttemptNum * 2;
+          const waitSecs = 2;
           setRetryCountdown(waitSecs);
           setIsLoading(true);
 
@@ -372,7 +381,7 @@ export function VideoPlayer({
             }
           }, 1000);
         } else {
-          // All 3 attempts exhausted
+          // All 2 attempts exhausted: show quick fallback switch
           setError(`Server "${server}" is currently unresponsive.`);
           setIsLoading(false);
         }

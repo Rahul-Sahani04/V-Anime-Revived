@@ -6,6 +6,9 @@ import { Metadata } from "next";
 
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL || "");
 
+// Enable Next.js ISR Edge Caching (1 hour cache at Vercel edge)
+export const revalidate = 3600;
+
 export async function generateMetadata({
   params,
 }: {
