@@ -111,7 +111,7 @@ export function HeroCarousel({ items }: HeroCarouselProps) {
     <section
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
-      className="relative h-[78vh] min-h-[580px] max-h-[820px] w-full overflow-hidden select-none"
+      className="relative min-h-[580px] sm:min-h-[620px] lg:min-h-[660px] max-h-[780px] h-[75vh] w-full overflow-hidden select-none"
     >
       {/* Background Banner Crossfade */}
       <AnimatePresence mode="wait">
@@ -144,15 +144,15 @@ export function HeroCarousel({ items }: HeroCarouselProps) {
       <div className="absolute inset-0 bg-radial from-transparent via-transparent to-black/60 z-10" />
 
       {/* Hero Content Container */}
-      <div className="container relative z-20 mx-auto flex h-full flex-col justify-end px-4 pb-14 lg:px-8">
-        <div className="max-w-3xl">
+      <div className="container relative z-20 mx-auto flex h-full flex-col justify-end px-4 pb-12 pt-28 lg:px-8">
+        <div className="max-w-2xl sm:max-w-3xl lg:max-w-4xl">
           {/* Metadata Badges */}
           <motion.div
             key={`badge-${currentAnime.id}`}
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="mb-4 flex flex-wrap items-center gap-2.5 text-xs font-bold uppercase tracking-wider"
+            className="mb-3 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider"
           >
             <span className="flex items-center gap-1.5 rounded-full bg-primary/20 px-3 py-1 text-primary border border-primary/30 shadow-[0_0_12px_rgba(225,29,72,0.3)]">
               <Sparkles className="h-3 w-3" />
@@ -179,7 +179,8 @@ export function HeroCarousel({ items }: HeroCarouselProps) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="mb-4 text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-white drop-shadow-lg"
+            className="mb-3 text-2xl sm:text-4xl md:text-5xl font-black tracking-tight text-white drop-shadow-xl line-clamp-2 leading-[1.15] max-w-2xl sm:max-w-3xl"
+            title={currentAnime.title}
           >
             {currentAnime.title}
           </motion.h1>
@@ -190,7 +191,7 @@ export function HeroCarousel({ items }: HeroCarouselProps) {
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
-            className="mb-4 flex flex-wrap gap-2 text-xs text-muted"
+            className="mb-3 flex flex-wrap gap-1.5 text-xs text-muted"
           >
             {currentAnime.genres.map((g) => (
               <span key={g} className="px-2 py-0.5 rounded bg-surface/60 border border-surface-border/80">
@@ -205,7 +206,7 @@ export function HeroCarousel({ items }: HeroCarouselProps) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.4 }}
-            className="mb-8 max-w-2xl text-sm sm:text-base leading-relaxed text-muted line-clamp-3 drop-shadow"
+            className="mb-6 max-w-2xl text-xs sm:text-sm leading-relaxed text-muted line-clamp-2 sm:line-clamp-3 drop-shadow"
           >
             {currentAnime.description}
           </motion.p>
