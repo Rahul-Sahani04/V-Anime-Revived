@@ -13,7 +13,7 @@ interface VideoPlayerProps {
   episode: string;
   server?: string;
   type?: "sub" | "dub";
-  autoNext?: boolean;
+  autoplay?: boolean;
   onEpisodeEnd?: () => void;
 }
 
@@ -22,6 +22,7 @@ export function VideoPlayer({
   episode,
   server = "senshi",
   type = "sub",
+  autoplay = true,
   onEpisodeEnd,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -406,6 +407,7 @@ export function VideoPlayer({
       <video
         ref={videoRef}
         controls
+        autoPlay={autoplay}
         playsInline
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}

@@ -23,16 +23,16 @@ import {
 interface WatchPlayerClientProps {
   animeId: string;
   episode: string;
-  server: string;
-  type: "sub" | "dub";
+  serverParam?: string;
+  typeParam?: "sub" | "dub";
   availableServers: string[];
 }
 
 export function WatchPlayerClient({
   animeId,
   episode,
-  server,
-  type,
+  serverParam,
+  typeParam,
   availableServers,
 }: WatchPlayerClientProps) {
   const router = useRouter();
@@ -45,7 +45,8 @@ export function WatchPlayerClient({
   const [showAmbientGlow, setShowAmbientGlow] = useState(true);
   const [countdown, setCountdown] = useState<number | null>(null);
 
-  // Convex hooks for Library & Status
+  // Convex hooks for Preferences, Library & Status
+  const userPreferences = useQuery(api.preferences.getUserPreferences);
   const animeStatus = useQuery(
     api.library.getAnimeUserStatus,
     numAnimeId > 0 ? { anilistId: numAnimeId } : "skip"
@@ -54,6 +55,12 @@ export function WatchPlayerClient({
   const toggleWatchlistMutation = useMutation(api.library.toggleWatchlist);
   const syncGuestProgressMutation = useMutation(api.progress.syncGuestProgress);
   const syncAniListAction = useAction(api.anilistSync.syncEpisodeProgressToAniList);
+
+  // Derive active server & type: query param -> saved preferences -> fallback default
+  const server = serverParam || userPreferences?.preferredServer || "senshi";
+  const type: "sub" | "dub" = (typeParam as "sub" | "dub") || (userPreferences?.preferredLanguage as "sub" | "dub") || "sub";
+  const autoNext = userPreferences?.autoNext ?? true;
+  const autoplay = userPreferences?.autoplay ?? true;
 
   // Sync guest progress to Convex on login
   useEffect(() => {
@@ -99,8 +106,10 @@ export function WatchPlayerClient({
       });
     }
 
-    // Start 5-second countdown to next episode
-    setCountdown(5);
+    // Start 5-second countdown to next episode if auto-next is enabled
+    if (autoNext) {
+      setCountdown(5);
+    }
   };
 
   const handlePlayNextImmediately = () => {
@@ -116,7 +125,7 @@ export function WatchPlayerClient({
   const episodeList = Array.from({ length: totalEpisodes }, (_, i) => i + 1);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background pb-20">
+    <div className="min-h-screen bg-background text-foreground pb-24">
       {/* Video Theater Section */}
       <div className="relative w-full bg-black/90 py-4 lg:py-6 overflow-hidden border-b border-surface-border/60">
         {/* Ambient Glow behind player */}
@@ -134,6 +143,7 @@ export function WatchPlayerClient({
               episode={episode}
               server={server}
               type={type}
+              autoplay={autoplay}
               onEpisodeEnd={handleEpisodeEnd}
             />
 

@@ -36,7 +36,7 @@ export default async function WatchPage({
   searchParams: Promise<{ server?: string; type?: string }>;
 }) {
   const { id, episode } = await params;
-  const { server = "senshi", type = "sub" } = await searchParams;
+  const { server, type } = await searchParams;
 
   const availableServers = [
     "anizone",
@@ -52,8 +52,8 @@ export default async function WatchPage({
     <WatchPlayerClient
       animeId={id}
       episode={episode}
-      server={server}
-      type={type as "sub" | "dub"}
+      serverParam={server}
+      typeParam={type as "sub" | "dub" | undefined}
       availableServers={availableServers}
     />
   );
