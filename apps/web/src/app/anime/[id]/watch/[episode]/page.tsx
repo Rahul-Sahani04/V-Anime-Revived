@@ -37,15 +37,46 @@ export default async function WatchPage({
 }) {
   const { id, episode } = await params;
   const { server, type } = await searchParams;
+  const numId = parseInt(id, 10);
+
+  let animeData = null;
+  if (numId) {
+    try {
+      animeData = await convex.action(api.anilist.getAnimeDetails, { id: numId });
+    } catch (err) {
+      console.error(`Failed to fetch anime details for ID ${id}`, err);
+    }
+  }
+
+  const formattedAnime = animeData
+    ? {
+        id: animeData.id.toString(),
+        title: animeData.title?.english || animeData.title?.romaji || `Anime #${id}`,
+        romajiTitle: animeData.title?.romaji || "",
+        description: animeData.description || "",
+        posterUrl: animeData.coverImage?.extraLarge || animeData.coverImage?.large || "",
+        bannerUrl: animeData.bannerImage || animeData.coverImage?.extraLarge || "",
+        genres: animeData.genres || ["Action", "Anime"],
+        status: animeData.status || "FINISHED",
+        episodes: animeData.nextAiringEpisode
+          ? animeData.nextAiringEpisode.episode - 1
+          : animeData.episodes || 24,
+        rating: animeData.averageScore ? (animeData.averageScore / 10).toFixed(1) : "9.0",
+        year: animeData.seasonYear?.toString() || "2024",
+        studio: animeData.studio || "Unknown Studio",
+        format: animeData.format || "TV",
+        relations: animeData.relations || [],
+      }
+    : null;
 
   const availableServers = [
+    "senshi",
     "anizone",
+    "anikoto",
+    "miruro",
     "anineko",
     "reanime",
-    "anikoto",
-    "senshi",
     "animeheaven",
-    "miruro",
   ];
 
   return (
@@ -55,6 +86,7 @@ export default async function WatchPage({
       serverParam={server}
       typeParam={type as "sub" | "dub" | undefined}
       availableServers={availableServers}
+      anime={formattedAnime}
     />
   );
 }

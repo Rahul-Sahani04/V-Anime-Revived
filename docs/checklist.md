@@ -16,21 +16,29 @@ This document tracks the overall progress of the V-Anime Revived project.
 - **Video Player**:
   - Built a dynamic `VideoPlayer` component utilizing `hls.js` for robust M3U8 streaming and native HLS fallback for Apple devices.
   - Implemented dynamic stream URL extraction (`hlsProxyUrl`, `m3u8`, `mp4ProxyUrl`).
-- **Watch Page UI**:
-  - Fully wired up dynamic routing.
-  - Added interactive buttons to toggle between multiple streaming Servers and Audio formats (Sub/Dub) that directly update the video feed via URL parameters.
+- **Watch Page Experience & Layout Overhaul**:
+  - Implemented top Breadcrumbs bar with anime title (English & Romaji), episode badge, score pill, release year, studio, and format badges.
+  - Implemented one-click quick actions in header: "Add to Watchlist" (reactive Convex status), "Favorite", "Share Episode Link", and "Series Overview".
+  - Implemented rich 2-column responsive dashboard:
+    - **Left Column**: Anime overview card with cover art thumbnail, expandable synopsis, genre pills, streaming server matrix (Senshi, Anizone, Anikoto, Miruro, etc.), dual audio selector (Subbed JP vs Dubbed EN), and related franchise anime cards.
+    - **Right Column**: Interactive Episode Browser featuring Grid vs Detailed List view toggle, live episode search/jump input, 50-episode chunked tabs for long-running shows (e.g. `1-50`, `51-100`), and real-time active playing badge with pulsating indicator.
 - **CORS & Whitelisting**: Whitelisted AniList CDN (`s4.anilist.co`) in `next.config.ts`.
 
 - **Convex Reactive Backend Modules**:
   - Implemented `library.ts` (`toggleFavorite`, `toggleWatchlist`, `getLibrary`, `getAnimeUserStatus`).
   - Implemented `progress.ts` (`updateProgress`, `getAnimeProgress`, `getContinueWatching`, `getWatchHistory`, `syncGuestProgress`).
   - Implemented `preferences.ts` (`getUserPreferences`, `updateUserPreferences`).
-- **Video Player Playback Tracking & Automation**:
-  - Implemented debounced (15s) time updates, pause/unload saves, and completion (≥90%) detection.
-  - Implemented automatic resumption from saved timestamp with quick "Restart" trigger.
-  - Implemented 5-second Auto-Next episode countdown banner with play immediately and cancel actions.
-  - Implemented full keyboard shortcut support (Space/K, Arrows/J/L for seek, F for fullscreen, M for mute).
-  - Implemented guest fallback to `localStorage` and automatic sync to Convex on Clerk login.
+- **Custom Cinematic Video Player & AniSkip Integration**:
+  - Replaced native browser controls with a custom floating gradient HUD with auto-hide timer (2.5s idle).
+  - Implemented multi-layered progress scrubber (Buffer track, Played track, glow scrub thumb, and hover timestamp tooltip).
+  - Integrated open-source **AniSkip API** (`https://api.aniskip.com`) to automatically detect episode OP/ED/recap ranges and display a floating "Skip Opening (S)" button.
+  - Added fallback manual "+85s Intro" jump button and ±10s quick seek buttons.
+  - Added playback speed selector popover (0.5x, 0.75x, 1.0x, 1.25x, 1.5x, 2.0x).
+  - Added Picture-in-Picture (PiP) and Fullscreen API support.
+  - Implemented center-screen ripple animations for play/pause and seeking.
+  - Added mobile double-tap to seek (left 40% = -10s, right 40% = +10s).
+  - Complete keyboard shortcut engine (Space/K, J/L, Arrows, F, M, S, P) with transient on-screen toast alerts.
+  - Automatic timestamp resumption with quick "Restart" trigger.
 - **Anime Details Interactive Actions**:
   - Interactive "Add to Watchlist" and "Favorite" buttons wired directly to reactive Convex mutations with Clerk auth redirect.
 
