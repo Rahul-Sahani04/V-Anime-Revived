@@ -1,4 +1,4 @@
-import { action, query, internalMutation } from "./_generated/server";
+import { action, query, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
@@ -278,49 +278,119 @@ export const getTrending = action({
 
 export const getAnimeDetails = action({
   args: { id: v.number() },
-  handler: async (ctx, args) => {
-    const response = await fetch(ANILIST_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        query: INFO_QUERY,
-        variables: { id: args.id },
-      }),
+  handler: async (ctx, args): Promise<any> => {
+    let response: Response | null = null;
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    // Retry loop with backoff for rate limits (429) and network blips
+    while (attempts < maxAttempts) {
+      attempts++;
+      try {
+        response = await fetch(ANILIST_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            query: INFO_QUERY,
+            variables: { id: args.id },
+          }),
+        });
+
+        if (response.ok) {
+          break;
+        }
+
+        // If rate-limited or AniList server error, back off and retry
+        if (response.status === 429 || response.status >= 500) {
+          if (attempts < maxAttempts) {
+            await new Promise((resolve) => setTimeout(resolve, 600 * attempts));
+            continue;
+          }
+        }
+      } catch {
+        if (attempts < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 600 * attempts));
+          continue;
+        }
+      }
+    }
+
+    if (response && response.ok) {
+      try {
+        const data = await response.json();
+        const media = data.data?.Media;
+
+        if (media) {
+          const derivedEpisodes =
+            media.episodes ||
+            (media.nextAiringEpisode?.episode
+              ? media.nextAiringEpisode.episode - 1
+              : media.status === "RELEASING"
+                ? 1100
+                : 24);
+
+          const cleanedDesc = cleanDescription(media.description);
+          const studioName = media.studios?.nodes?.[0]?.name || "Unknown Studio";
+
+          // Cache to Convex DB in background
+          await ctx.runMutation(internal.anilist.cacheAnime, {
+            anilistId: media.id,
+            title: media.title,
+            description: cleanedDesc,
+            posterUrl: media.coverImage?.extraLarge || media.coverImage?.large || "",
+            bannerUrl: media.bannerImage || "",
+            genres: media.genres || [],
+            episodes: derivedEpisodes,
+            status: media.status,
+          });
+
+          return {
+            ...media,
+            episodes: derivedEpisodes,
+            description: cleanedDesc,
+            studio: studioName,
+          };
+        }
+      } catch (e) {
+        console.error(`Failed to parse AniList response for ${args.id}:`, e);
+      }
+    }
+
+    // Fallback to Convex database cache if AniList is rate limiting or unavailable
+    const cached = await ctx.runQuery(internal.anilist.getInternalCachedAnime, {
+      anilistId: args.id,
     });
 
-    if (!response.ok) throw new Error(`Failed to fetch info for anime ${args.id}`);
-    const data = await response.json();
-    const media = data.data.Media;
-
-    if (media) {
-      const derivedEpisodes =
-        media.episodes ||
-        (media.nextAiringEpisode?.episode ? media.nextAiringEpisode.episode - 1 : (media.status === "RELEASING" ? 1100 : 24));
-
-      const cleanedDesc = cleanDescription(media.description);
-      const studioName = media.studios?.nodes?.[0]?.name || "Unknown Studio";
-
-      // Cache to Convex DB
-      await ctx.runMutation(internal.anilist.cacheAnime, {
-        anilistId: media.id,
-        title: media.title,
-        description: cleanedDesc,
-        posterUrl: media.coverImage?.extraLarge || media.coverImage?.large || "",
-        bannerUrl: media.bannerImage || "",
-        genres: media.genres || [],
-        episodes: derivedEpisodes,
-        status: media.status,
-      });
-
+    if (cached) {
       return {
-        ...media,
-        episodes: derivedEpisodes,
-        description: cleanedDesc,
-        studio: studioName,
+        id: cached.anilistId,
+        title: cached.title,
+        description: cached.description || "",
+        coverImage: {
+          extraLarge: cached.posterUrl,
+          large: cached.posterUrl,
+        },
+        bannerImage: cached.bannerUrl,
+        genres: cached.genres || [],
+        status: cached.status || "FINISHED",
+        episodes: cached.episodes || 24,
+        averageScore: 85,
+        studio: "Anime Studio",
+        relations: [],
       };
     }
 
     return null;
+  },
+});
+
+export const getInternalCachedAnime = internalQuery({
+  args: { anilistId: v.number() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("animeCache")
+      .withIndex("by_anilistId", (q) => q.eq("anilistId", args.anilistId))
+      .first();
   },
 });
 

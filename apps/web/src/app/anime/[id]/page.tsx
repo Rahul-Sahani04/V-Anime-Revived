@@ -37,6 +37,8 @@ export async function generateMetadata({
   }
 }
 
+import { AnimeDetailsFallback } from "./AnimeDetailsFallback";
+
 export default async function AnimeDetailsPage({
   params,
 }: {
@@ -55,23 +57,7 @@ export default async function AnimeDetailsPage({
   }
 
   if (!animeData) {
-    return (
-      <div className="container mx-auto px-4 py-28 text-center max-w-lg">
-        <div className="rounded-2xl border border-surface-border bg-surface/50 p-8 shadow-2xl">
-          <div className="flex justify-center mb-4 text-3xl">📺</div>
-          <h1 className="text-2xl font-black text-white mb-2">Anime Not Found</h1>
-          <p className="text-xs text-muted mb-6">
-            We couldn&apos;t find anime details for ID #{id}. It may not exist on AniList or the request timed out.
-          </p>
-          <Link
-            href="/"
-            className="inline-flex items-center justify-center px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 shadow-[0_0_15px_rgba(225,29,72,0.4)] transition-all"
-          >
-            Explore Trending
-          </Link>
-        </div>
-      </div>
-    );
+    return <AnimeDetailsFallback animeId={id} />;
   }
 
   const formattedAnime = {

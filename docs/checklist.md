@@ -44,7 +44,10 @@ This document tracks the overall progress of the V-Anime Revived project.
 
 - **Live Data Integration (Home & Details Pages)**:
   - Wired Home page to live AniList/Convex feed (`getHomeFeed`): Spotlight Hero Carousel, Continue Watching shelf (reactive Convex + guest `localStorage`), Trending Now, Popular This Season, and Critically Acclaimed shelves.
-  - Wired Anime Details page (`/anime/[id]`) to live `getAnimeDetails` with dynamic episode count derivation (supporting ongoing airing anime), studio info, synopsis cleaning, and automatic Convex cache updates.
+- **Anime Details Page & API Resiliency Engine**:
+  - Implemented 3-stage retry loop with exponential backoff in `getAnimeDetails` for handling AniList rate-limits (HTTP 429) and Cloudflare timeouts on Vercel/serverless deployments.
+  - Implemented automatic fallback to persistent Convex DB cache (`animeCache`) when external AniList API is rate-limited.
+  - Implemented `AnimeDetailsFallback` client component providing automatic in-browser cache hydration and a 1-click "Retry Connection" recovery action so users never hit a dead-end page.
   - Implemented dynamic OpenGraph SEO metadata across Details (`/anime/[id]`) and Watch (`/anime/[id]/watch/[episode]`) pages.
 
 - **User Library Dashboard (`/library`)**:
