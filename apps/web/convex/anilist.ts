@@ -4,6 +4,53 @@ import { v } from "convex/values";
 
 const ANILIST_URL = "https://graphql.anilist.co";
 
+const ADVANCED_SEARCH_QUERY = `
+  query(
+    $search: String,
+    $genre: String,
+    $season: MediaSeason,
+    $seasonYear: Int,
+    $format: MediaFormat,
+    $status: MediaStatus,
+    $sort: [MediaSort],
+    $page: Int,
+    $perPage: Int
+  ) {
+    Page(page: $page, perPage: $perPage) {
+      pageInfo {
+        total
+        perPage
+        currentPage
+        lastPage
+        hasNextPage
+      }
+      media(
+        search: $search,
+        genre: $genre,
+        season: $season,
+        seasonYear: $seasonYear,
+        format: $format,
+        status: $status,
+        sort: $sort,
+        type: ANIME
+      ) {
+        id
+        title { romaji english native }
+        description(asHtml: false)
+        coverImage { extraLarge large }
+        bannerImage
+        episodes
+        status
+        format
+        seasonYear
+        genres
+        averageScore
+        nextAiringEpisode { episode }
+      }
+    }
+  }
+`;
+
 const SEARCH_QUERY = `
   query($search: String, $page: Int, $perPage: Int) {
     Page(page: $page, perPage: $perPage) {
@@ -99,6 +146,64 @@ function cleanDescription(desc?: string | null): string {
   if (!desc) return "No description available.";
   return desc.replace(/<[^>]*>?/gm, "").trim();
 }
+
+export const searchAnimeAdvanced = action({
+  args: {
+    query: v.optional(v.string()),
+    genre: v.optional(v.string()),
+    season: v.optional(v.string()),
+    seasonYear: v.optional(v.number()),
+    format: v.optional(v.string()),
+    status: v.optional(v.string()),
+    sort: v.optional(v.string()),
+    page: v.optional(v.number()),
+    perPage: v.optional(v.number()),
+  },
+  handler: async (_ctx, args) => {
+    const variables: Record<string, unknown> = {
+      page: args.page || 1,
+      perPage: args.perPage || 18,
+    };
+
+    if (args.query && args.query.trim()) variables.search = args.query.trim();
+    if (args.genre && args.genre !== "All") variables.genre = args.genre;
+    if (args.season && args.season !== "All") variables.season = args.season;
+    if (args.seasonYear) variables.seasonYear = args.seasonYear;
+    if (args.format && args.format !== "All") variables.format = args.format;
+    if (args.status && args.status !== "All") variables.status = args.status;
+
+    // Sort mapping
+    if (args.sort) {
+      variables.sort = [args.sort];
+    } else {
+      variables.sort = args.query ? ["SEARCH_MATCH", "POPULARITY_DESC"] : ["POPULARITY_DESC"];
+    }
+
+    const response = await fetch(ANILIST_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        query: ADVANCED_SEARCH_QUERY,
+        variables,
+      }),
+    });
+
+    if (!response.ok) throw new Error("Failed to fetch advanced search results from AniList");
+    const data = await response.json();
+
+    const pageData = data.data.Page;
+    return {
+      media: pageData.media || [],
+      pageInfo: pageData.pageInfo || {
+        total: 0,
+        perPage: 18,
+        currentPage: 1,
+        lastPage: 1,
+        hasNextPage: false,
+      },
+    };
+  },
+});
 
 export const searchAnime = action({
   args: { query: v.string() },

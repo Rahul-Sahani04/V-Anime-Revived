@@ -46,8 +46,14 @@ This document tracks the overall progress of the V-Anime Revived project.
   - Implemented Clear All Watch History modal with confirmation dialog.
   - Added guest preview with local storage hydration and Clerk sign-in banner.
 
+- **Advanced Search & Multi-Attribute Filtering (`/search`)**:
+  - Implemented `searchAnimeAdvanced` Convex action with AniList GraphQL querying.
+  - Added multi-attribute filter panel for Genre, Season, Year, Format, Status, and Sort.
+  - Implemented live debounced (400ms) search input with active filter badges and one-click dismiss.
+  - Implemented URL SearchParams synchronization for shareable search links and browser history navigation.
+  - Implemented multi-page pagination with smooth scrolling and loading skeleton states.
+
 ## ⏳ Work In Progress (WIP)
-- **Search Page UI Filters**: Add advanced filters (Season, Year, Format, Status) & pagination.
 - **Loading States**: Add skeleton loaders (`loading.tsx`) and Next.js error boundaries.
 
 ## 🛑 Haven't Started
