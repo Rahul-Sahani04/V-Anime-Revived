@@ -53,8 +53,12 @@ This document tracks the overall progress of the V-Anime Revived project.
   - Implemented URL SearchParams synchronization for shareable search links and browser history navigation.
   - Implemented multi-page pagination with smooth scrolling and loading skeleton states.
 
+- **Loading Skeletons & Error Boundaries**:
+  - Implemented Next.js `loading.tsx` shimmer skeletons for Home (`/`), Anime Details (`/anime/[id]`), Watch Player (`/anime/[id]/watch/[episode]`), and Library (`/library`).
+  - Implemented client `error.tsx` recovery boundaries with "Try Again", "Return Home", and expandable technical error digests across all core routes.
+
 ## ⏳ Work In Progress (WIP)
-- **Loading States**: Add skeleton loaders (`loading.tsx`) and Next.js error boundaries.
+- **Social Features**: Comment sections under episodes, episode ratings, and user reviews.
 
 ## 🛑 Haven't Started
 - **User Profiles**: Custom avatars, bio, and tracking stats.
