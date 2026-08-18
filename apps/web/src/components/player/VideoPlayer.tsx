@@ -319,10 +319,25 @@ export function VideoPlayer({
             }
           });
 
-          hls.on(Hls.Events.ERROR, (_event, data) => {
+          let hasAttemptedDirectFallback = false;
+
+          hls.on(Hls.Events.ERROR, (_event, errorData) => {
             if (isCancelled) return;
-            if (data.fatal) {
-              switch (data.type) {
+            if (errorData.fatal) {
+              if (
+                errorData.type === Hls.ErrorTypes.NETWORK_ERROR &&
+                !hasAttemptedDirectFallback &&
+                data?.m3u8 &&
+                streamUrl !== data.m3u8
+              ) {
+                console.warn("HLS proxy failed, attempting direct m3u8 fallback...");
+                hasAttemptedDirectFallback = true;
+                hls?.loadSource(data.m3u8);
+                hls?.startLoad();
+                return;
+              }
+
+              switch (errorData.type) {
                 case Hls.ErrorTypes.NETWORK_ERROR:
                   console.warn("HLS network error, attempting reload...");
                   hls?.startLoad();
