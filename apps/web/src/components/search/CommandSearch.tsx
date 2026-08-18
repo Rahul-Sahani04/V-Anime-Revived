@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, X, Play, Sparkles } from "lucide-react";
+import { useAction } from "convex/react";
+import { api } from "@convex/_generated/api";
+import { Search, X, Play, Sparkles, Loader2 } from "lucide-react";
 
-// Curated search list for instant response & quick search
-const QUICK_SEARCH_ITEMS = [
+// Curated default trending list for instant display before typing
+const DEFAULT_TRENDING = [
   { id: 113415, title: "Jujutsu Kaisen", genre: "Action, Supernatural", episodes: 24, poster: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-bbBWj4pEFseh.jpg" },
   { id: 16498, title: "Attack on Titan", genre: "Action, Drama, Fantasy", episodes: 25, poster: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498-73IhOXpJZiMF.jpg" },
   { id: 104578, title: "Vinland Saga", genre: "Action, Adventure, Historical", episodes: 24, poster: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx104578-LaZYFnmhFvdI.jpg" },
@@ -23,17 +25,64 @@ interface CommandSearchProps {
   onClose: () => void;
 }
 
+interface SearchItem {
+  id: number;
+  title: string;
+  genre: string;
+  episodes: number;
+  poster: string;
+}
+
 export function CommandSearch({ isOpen, onClose }: CommandSearchProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [results, setResults] = useState<SearchItem[]>(DEFAULT_TRENDING);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchAction = useAction(api.anilist.searchAnime);
   const router = useRouter();
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const filtered = query.trim() === ""
-    ? QUICK_SEARCH_ITEMS
-    : QUICK_SEARCH_ITEMS.filter((item) =>
-        item.title.toLowerCase().includes(query.toLowerCase()) ||
-        item.genre.toLowerCase().includes(query.toLowerCase())
-      );
+  // Live fuzzy search effect with debounce
+  useEffect(() => {
+    if (!query.trim()) {
+      setResults(DEFAULT_TRENDING);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const data = await searchAction({ query: query.trim() });
+        if (data && data.length > 0) {
+          const mapped: SearchItem[] = data.map((item: any) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
+            id: item.id,
+            title: item.title?.english || item.title?.romaji || "Anime",
+            genre: (item.genres || []).slice(0, 3).join(", ") || "Action, Anime",
+            episodes: item.episodes || 24,
+            poster: item.coverImage?.large || item.coverImage?.extraLarge || "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&q=80",
+          }));
+          setResults(mapped);
+        } else {
+          // Fallback filter
+          const fallback = DEFAULT_TRENDING.filter((item) =>
+            item.title.toLowerCase().includes(query.toLowerCase())
+          );
+          setResults(fallback);
+        }
+      } catch (err) {
+        console.warn("Search palette error:", err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 250);
+
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, [query, searchAction]);
 
   const handleSelect = useCallback(
     (id: number) => {
@@ -43,6 +92,13 @@ export function CommandSearch({ isOpen, onClose }: CommandSearchProps) {
     [onClose, router]
   );
 
+  const handleFullSearch = useCallback(() => {
+    if (query.trim()) {
+      onClose();
+      router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+    }
+  }, [query, onClose, router]);
+
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -50,13 +106,17 @@ export function CommandSearch({ isOpen, onClose }: CommandSearchProps) {
 
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setSelectedIndex((prev) => (prev + 1) % Math.max(1, filtered.length));
+        setSelectedIndex((prev) => (prev + 1) % Math.max(1, results.length));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setSelectedIndex((prev) => (prev - 1 + filtered.length) % Math.max(1, filtered.length));
-      } else if (e.key === "Enter" && filtered[selectedIndex]) {
+        setSelectedIndex((prev) => (prev - 1 + results.length) % Math.max(1, results.length));
+      } else if (e.key === "Enter") {
         e.preventDefault();
-        handleSelect(filtered[selectedIndex].id);
+        if (results[selectedIndex]) {
+          handleSelect(results[selectedIndex].id);
+        } else {
+          handleFullSearch();
+        }
       } else if (e.key === "Escape") {
         e.preventDefault();
         onClose();
@@ -65,9 +125,8 @@ export function CommandSearch({ isOpen, onClose }: CommandSearchProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, filtered, selectedIndex, handleSelect, onClose]);
+  }, [isOpen, results, selectedIndex, handleSelect, handleFullSearch, onClose]);
 
-  // Reset index when query changes via onChange handler
   const handleQueryChange = (val: string) => {
     setQuery(val);
     setSelectedIndex(0);
@@ -97,14 +156,18 @@ export function CommandSearch({ isOpen, onClose }: CommandSearchProps) {
           >
             {/* Search Input Header */}
             <div className="flex items-center gap-3 border-b border-surface-border px-4 py-3.5 bg-surface/50">
-              <Search className="h-5 w-5 text-primary shrink-0" />
+              {isSearching ? (
+                <Loader2 className="h-5 w-5 text-primary animate-spin shrink-0" />
+              ) : (
+                <Search className="h-5 w-5 text-primary shrink-0" />
+              )}
               <input
                 id="palette-search-input"
                 name="palette-search"
                 aria-label="Search anime titles, genres, or series"
                 type="text"
                 autoFocus
-                placeholder="Search anime titles, genres, or series..."
+                placeholder="Search any anime, synonyms, or characters..."
                 value={query}
                 onChange={(e) => handleQueryChange(e.target.value)}
                 className="w-full bg-transparent text-sm text-foreground placeholder:text-muted focus:outline-none"
@@ -127,18 +190,36 @@ export function CommandSearch({ isOpen, onClose }: CommandSearchProps) {
 
             {/* Results List */}
             <div className="max-h-[380px] overflow-y-auto p-2">
-              <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted flex items-center gap-1.5">
-                {query ? <Search className="h-3 w-3" /> : <Sparkles className="h-3 w-3 text-primary" />}
-                {query ? `Results (${filtered.length})` : "Trending Anime"}
+              <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  {query ? <Search className="h-3 w-3" /> : <Sparkles className="h-3 w-3 text-primary" />}
+                  {query ? `Matches (${results.length})` : "Trending Anime"}
+                </span>
+                {query && (
+                  <button
+                    onClick={handleFullSearch}
+                    className="text-xs text-primary hover:underline lowercase"
+                  >
+                    View all in advanced search →
+                  </button>
+                )}
               </div>
 
-              {filtered.length === 0 ? (
+              {results.length === 0 && !isSearching ? (
                 <div className="py-12 text-center text-sm text-muted">
                   No anime found matching &quot;{query}&quot;
+                  <div className="mt-2">
+                    <button
+                      onClick={handleFullSearch}
+                      className="text-xs text-primary underline"
+                    >
+                      Try advanced multi-attribute search
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {filtered.map((item, index) => {
+                  {results.map((item, index) => {
                     const isSelected = index === selectedIndex;
                     return (
                       <motion.div
@@ -201,7 +282,7 @@ export function CommandSearch({ isOpen, onClose }: CommandSearchProps) {
                 <kbd className="px-1.5 py-0.5 rounded bg-surface-hover border border-surface-border font-mono">↵</kbd>
               </div>
               <div className="flex items-center gap-1">
-                <span>V-Anime Revived</span>
+                <span>Fuzzy & Rate-Limit Free</span>
               </div>
             </div>
           </motion.div>

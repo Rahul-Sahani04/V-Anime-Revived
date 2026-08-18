@@ -2,8 +2,8 @@ import { action, query, internalMutation, internalQuery } from "./_generated/ser
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
-const ANILIST_URL = "https://graphql.anilist.co";
 const KITSU_URL = "https://kitsu.io/api/edge";
+const ANILIST_URL = "https://graphql.anilist.co";
 const JIKAN_URL = "https://api.jikan.moe/v4";
 
 const ADVANCED_SEARCH_QUERY = `
@@ -149,7 +149,7 @@ function cleanDescription(desc?: string | null): string {
   return desc.replace(/<[^>]*>?/gm, "").trim();
 }
 
-// Helper to normalize Kitsu items to standard schema
+// Helper to normalize Kitsu items to standard application schema
 function normalizeKitsuAnime(item: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
   const attr = item.attributes || {};
   const numId = parseInt(item.id, 10) || 0;
@@ -169,7 +169,13 @@ function normalizeKitsuAnime(item: any) { // eslint-disable-line @typescript-esl
     poster;
 
   const rawRating = parseFloat(attr.averageRating || "0");
-  const averageScore = rawRating > 0 ? Math.round(rawRating) : 82;
+  const averageScore = rawRating > 0 ? Math.round(rawRating) : 84;
+
+  let derivedFormat = (attr.subtype || "TV").toUpperCase();
+  if (derivedFormat === "MOVIE") derivedFormat = "MOVIE";
+  else if (derivedFormat === "SPECIAL") derivedFormat = "SPECIAL";
+  else if (derivedFormat === "OVA") derivedFormat = "OVA";
+  else derivedFormat = "TV";
 
   return {
     id: numId,
@@ -187,7 +193,7 @@ function normalizeKitsuAnime(item: any) { // eslint-disable-line @typescript-esl
     bannerImage: banner,
     episodes: attr.episodeCount || 24,
     status: attr.status === "current" ? "RELEASING" : "FINISHED",
-    format: (attr.subtype || "TV").toUpperCase(),
+    format: derivedFormat,
     seasonYear: attr.startDate ? parseInt(attr.startDate.split("-")[0], 10) : 2024,
     genres: ["Action", "Anime"],
     averageScore,
@@ -195,16 +201,69 @@ function normalizeKitsuAnime(item: any) { // eslint-disable-line @typescript-esl
   };
 }
 
-// Fallback search using Kitsu API
-async function fallbackKitsuSearch(query: string, page = 1, perPage = 18) {
+// Fetch Kitsu Search with full filters & elasticsearch fuzzy tolerance
+async function fetchKitsuSearch(params: {
+  query?: string;
+  genre?: string;
+  format?: string;
+  seasonYear?: number;
+  status?: string;
+  sort?: string;
+  page?: number;
+  perPage?: number;
+}) {
   try {
+    const page = params.page || 1;
+    const perPage = params.perPage || 18;
     const offset = (page - 1) * perPage;
-    const url = `${KITSU_URL}/anime?filter[text]=${encodeURIComponent(query)}&page[limit]=${perPage}&page[offset]=${offset}`;
-    const res = await fetch(url, { headers: { Accept: "application/vnd.api+json" } });
+
+    const queryParts: string[] = [
+      `page[limit]=${perPage}`,
+      `page[offset]=${offset}`,
+    ];
+
+    if (params.query && params.query.trim()) {
+      queryParts.push(`filter[text]=${encodeURIComponent(params.query.trim())}`);
+    }
+
+    if (params.genre && params.genre !== "All") {
+      queryParts.push(`filter[categories]=${encodeURIComponent(params.genre.toLowerCase())}`);
+    }
+
+    if (params.format && params.format !== "All") {
+      queryParts.push(`filter[subtype]=${encodeURIComponent(params.format.toLowerCase())}`);
+    }
+
+    if (params.seasonYear) {
+      queryParts.push(`filter[seasonYear]=${params.seasonYear}`);
+    }
+
+    if (params.status && params.status !== "All") {
+      const statusVal = params.status === "RELEASING" ? "current" : "finished";
+      queryParts.push(`filter[status]=${statusVal}`);
+    }
+
+    // Sort mapping
+    if (params.sort === "SCORE_DESC") {
+      queryParts.push(`sort=-averageRating`);
+    } else if (params.sort === "START_DATE_DESC") {
+      queryParts.push(`sort=-startDate`);
+    } else if (params.sort === "TRENDING_DESC") {
+      queryParts.push(`sort=-userCount`);
+    } else if (!params.query) {
+      queryParts.push(`sort=-userCount`);
+    }
+
+    const url = `${KITSU_URL}/anime?${queryParts.join("&")}`;
+    const res = await fetch(url, {
+      headers: { Accept: "application/vnd.api+json" },
+    });
+
     if (!res.ok) return null;
     const data = await res.json();
     const media = (data.data || []).map(normalizeKitsuAnime);
     const total = data.meta?.count || media.length;
+
     return {
       media,
       pageInfo: {
@@ -216,22 +275,50 @@ async function fallbackKitsuSearch(query: string, page = 1, perPage = 18) {
       },
     };
   } catch (err) {
-    console.error("Kitsu fallback search error:", err);
+    console.warn("Kitsu search error:", err);
     return null;
   }
 }
 
-// Fallback trending using Kitsu API
-async function fallbackKitsuTrending() {
+// Fetch Kitsu Trending Feed
+async function fetchKitsuTrending(limit = 12) {
   try {
-    const url = `${KITSU_URL}/trending/anime?limit=15`;
+    const url = `${KITSU_URL}/trending/anime?limit=${limit}`;
     const res = await fetch(url, { headers: { Accept: "application/vnd.api+json" } });
-    if (!res.ok) return null;
+    if (!res.ok) return [];
     const data = await res.json();
     return (data.data || []).map(normalizeKitsuAnime);
   } catch (err) {
-    console.error("Kitsu trending fallback error:", err);
-    return null;
+    console.warn("Kitsu trending fetch error:", err);
+    return [];
+  }
+}
+
+// Fetch Kitsu Popular Feed
+async function fetchKitsuPopular(limit = 12) {
+  try {
+    const url = `${KITSU_URL}/anime?sort=-userCount&page[limit]=${limit}`;
+    const res = await fetch(url, { headers: { Accept: "application/vnd.api+json" } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.data || []).map(normalizeKitsuAnime);
+  } catch (err) {
+    console.warn("Kitsu popular fetch error:", err);
+    return [];
+  }
+}
+
+// Fetch Kitsu Top Rated Feed
+async function fetchKitsuTopRated(limit = 12) {
+  try {
+    const url = `${KITSU_URL}/anime?sort=-averageRating&page[limit]=${limit}`;
+    const res = await fetch(url, { headers: { Accept: "application/vnd.api+json" } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.data || []).map(normalizeKitsuAnime);
+  } catch (err) {
+    console.warn("Kitsu top-rated fetch error:", err);
+    return [];
   }
 }
 
@@ -247,29 +334,41 @@ export const searchAnimeAdvanced = action({
     page: v.optional(v.number()),
     perPage: v.optional(v.number()),
   },
-  handler: async (_ctx, args) => {
-    const variables: Record<string, unknown> = {
+  handler: async (_ctx, args): Promise<any> => {
+    // 1. PRIMARY: Kitsu Search (Elasticsearch fuzzy, no 429 rate limits, matches typos & abbreviations)
+    const kitsuResult = await fetchKitsuSearch({
+      query: args.query,
+      genre: args.genre,
+      format: args.format,
+      seasonYear: args.seasonYear,
+      status: args.status,
+      sort: args.sort,
       page: args.page || 1,
       perPage: args.perPage || 18,
-    };
+    });
 
-    if (args.query && args.query.trim()) variables.search = args.query.trim();
-    if (args.genre && args.genre !== "All") variables.genre = args.genre;
-    if (args.season && args.season !== "All") variables.season = args.season;
-    if (args.seasonYear) variables.seasonYear = args.seasonYear;
-    if (args.format && args.format !== "All") variables.format = args.format;
-    if (args.status && args.status !== "All") variables.status = args.status;
-
-    // Sort mapping
-    if (args.sort) {
-      variables.sort = [args.sort];
-    } else {
-      variables.sort = args.query ? ["SEARCH_MATCH", "POPULARITY_DESC"] : ["POPULARITY_DESC"];
+    if (kitsuResult && kitsuResult.media.length > 0) {
+      return kitsuResult;
     }
 
+    // 2. SECONDARY FALLBACK: AniList GraphQL
     try {
+      const variables: Record<string, unknown> = {
+        page: args.page || 1,
+        perPage: args.perPage || 18,
+      };
+
+      if (args.query && args.query.trim()) variables.search = args.query.trim();
+      if (args.genre && args.genre !== "All") variables.genre = args.genre;
+      if (args.season && args.season !== "All") variables.season = args.season;
+      if (args.seasonYear) variables.seasonYear = args.seasonYear;
+      if (args.format && args.format !== "All") variables.format = args.format;
+      if (args.status && args.status !== "All") variables.status = args.status;
+      if (args.sort) variables.sort = [args.sort];
+      else variables.sort = args.query ? ["SEARCH_MATCH", "POPULARITY_DESC"] : ["POPULARITY_DESC"];
+
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
 
       const response = await fetch(ANILIST_URL, {
         method: "POST",
@@ -285,11 +384,12 @@ export const searchAnimeAdvanced = action({
       if (response.ok) {
         const data = await response.json();
         const pageData = data.data?.Page;
-        if (pageData) {
+        const media = pageData?.media || [];
+        if (media.length > 0) {
           return {
-            media: pageData.media || [],
-            pageInfo: pageData.pageInfo || {
-              total: 0,
+            media,
+            pageInfo: pageData?.pageInfo || {
+              total: media.length,
               perPage: 18,
               currentPage: 1,
               lastPage: 1,
@@ -299,13 +399,7 @@ export const searchAnimeAdvanced = action({
         }
       }
     } catch (e) {
-      console.warn("AniList advanced search timed out or was rate limited, switching to Kitsu...", e);
-    }
-
-    // Seamless Fallback to Kitsu API Search
-    if (args.query) {
-      const fallback = await fallbackKitsuSearch(args.query, args.page || 1, args.perPage || 18);
-      if (fallback) return fallback;
+      console.warn("AniList advanced search secondary fallback error:", e);
     }
 
     return {
@@ -317,7 +411,19 @@ export const searchAnimeAdvanced = action({
 
 export const searchAnime = action({
   args: { query: v.string() },
-  handler: async (_ctx, args) => {
+  handler: async (_ctx, args): Promise<any> => {
+    // 1. PRIMARY: Kitsu Search
+    const kitsuResult = await fetchKitsuSearch({
+      query: args.query,
+      page: 1,
+      perPage: 20,
+    });
+
+    if (kitsuResult && kitsuResult.media.length > 0) {
+      return kitsuResult.media;
+    }
+
+    // 2. SECONDARY: AniList
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
@@ -335,26 +441,61 @@ export const searchAnime = action({
 
       if (response.ok) {
         const data = await response.json();
-        if (data.data?.Page?.media) {
-          return data.data.Page.media;
-        }
+        const media = data.data?.Page?.media || [];
+        if (media.length > 0) return media;
       }
     } catch (e) {
-      console.warn("AniList search throttled, using Kitsu fallback...", e);
+      console.warn("AniList search secondary fallback error:", e);
     }
 
-    // Fallback to Kitsu
-    const kitsuResults = await fallbackKitsuSearch(args.query, 1, 20);
-    return kitsuResults?.media || [];
+    return [];
   },
 });
 
 export const getHomeFeed = action({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<any> => {
+    // 1. PRIMARY: Fetch from Kitsu (No rate limits on Vercel, ultra-fast)
+    try {
+      const [trending, popular, topRated] = await Promise.all([
+        fetchKitsuTrending(12),
+        fetchKitsuPopular(12),
+        fetchKitsuTopRated(12),
+      ]);
+
+      if (trending.length > 0) {
+        // Cache trending in database in background
+        for (const anime of [...trending, ...popular].slice(0, 15)) {
+          await ctx.runMutation(internal.anilist.cacheAnime, {
+            anilistId: anime.id,
+            title: anime.title,
+            description: cleanDescription(anime.description),
+            posterUrl: anime.coverImage?.extraLarge || anime.coverImage?.large || "",
+            bannerUrl: anime.bannerImage || "",
+            genres: anime.genres || [],
+            episodes: anime.episodes,
+            status: anime.status,
+            averageScore: anime.averageScore,
+            year: anime.seasonYear,
+            studio: anime.studio || "Animation Studio",
+            format: anime.format || "TV",
+          });
+        }
+
+        return {
+          trending,
+          popular: popular.length > 0 ? popular : trending,
+          topRated: topRated.length > 0 ? topRated : trending,
+        };
+      }
+    } catch (kitsuErr) {
+      console.warn("Kitsu home feed primary fetch failed, trying AniList...", kitsuErr);
+    }
+
+    // 2. SECONDARY: AniList Home Feed
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
 
       const response = await fetch(ANILIST_URL, {
         method: "POST",
@@ -370,43 +511,44 @@ export const getHomeFeed = action({
         const popular = data.data?.popular?.media || [];
         const topRated = data.data?.topRated?.media || [];
 
-        // Cache trending in database in background
-        for (const anime of [...trending, ...popular].slice(0, 15)) {
-          await ctx.runMutation(internal.anilist.cacheAnime, {
-            anilistId: anime.id,
-            title: anime.title,
-            description: cleanDescription(anime.description),
-            posterUrl: anime.coverImage?.extraLarge || anime.coverImage?.large || "",
-            bannerUrl: anime.bannerImage || "",
-            genres: anime.genres || [],
-            episodes: anime.episodes || (anime.nextAiringEpisode ? anime.nextAiringEpisode.episode - 1 : undefined),
-            status: anime.status,
-            averageScore: anime.averageScore,
-            year: anime.seasonYear,
-            studio: anime.studio || "Animation Studio",
-            format: anime.format || "TV",
-          });
+        if (trending.length > 0) {
+          return { trending, popular, topRated };
         }
-
-        return { trending, popular, topRated };
       }
     } catch (e) {
-      console.warn("AniList home feed throttled, loading Kitsu trending fallback...", e);
+      console.warn("AniList home feed fallback throttled:", e);
     }
 
-    // Fallback to Kitsu Trending
-    const fallbackList = (await fallbackKitsuTrending()) || [];
+    // 3. LAST RESORT: Convex DB cached records
+    const dbCached: any[] = await ctx.runQuery(internal.anilist.getRecentCachedAnime, { limit: 12 });
+    const formattedDb = (dbCached || []).map((cached: any) => ({
+      id: cached.anilistId,
+      title: cached.title,
+      description: cached.description || "",
+      coverImage: { extraLarge: cached.posterUrl, large: cached.posterUrl },
+      bannerImage: cached.bannerUrl,
+      genres: cached.genres || ["Action", "Anime"],
+      status: cached.status || "FINISHED",
+      episodes: cached.episodes || 24,
+      averageScore: cached.averageScore || 85,
+      seasonYear: cached.year || 2024,
+      format: cached.format || "TV",
+    }));
+
     return {
-      trending: fallbackList.slice(0, 12),
-      popular: fallbackList.slice(0, 12),
-      topRated: fallbackList.slice(0, 12),
+      trending: formattedDb,
+      popular: formattedDb,
+      topRated: formattedDb,
     };
   },
 });
 
 export const getTrending = action({
   args: {},
-  handler: async (_ctx) => {
+  handler: async (_ctx): Promise<any> => {
+    const kitsuTrending = await fetchKitsuTrending(12);
+    if (kitsuTrending.length > 0) return kitsuTrending;
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
@@ -421,23 +563,21 @@ export const getTrending = action({
 
       if (response.ok) {
         const data = await response.json();
-        if (data.data?.trending?.media) {
-          return data.data.trending.media;
-        }
+        const media = data.data?.trending?.media || [];
+        if (media.length > 0) return media;
       }
     } catch (e) {
-      console.warn("AniList getTrending throttled, using Kitsu fallback...", e);
+      console.warn("AniList getTrending secondary fallback error:", e);
     }
 
-    const fallbackList = await fallbackKitsuTrending();
-    return fallbackList || [];
+    return [];
   },
 });
 
 export const getAnimeDetails = action({
   args: { id: v.number() },
   handler: async (ctx, args): Promise<any> => {
-    // 1. Instant Cache-First Hit: check Convex Database cache first (0ms latency, zero AniList rate limits)
+    // 1. Cache-First Hit: check Convex Database cache first (0ms latency, zero rate limits)
     const cached = await ctx.runQuery(internal.anilist.getInternalCachedAnime, {
       anilistId: args.id,
     });
@@ -464,48 +604,60 @@ export const getAnimeDetails = action({
       };
     }
 
-    // 2. Fetch from AniList with short timeout
-    let response: Response | null = null;
-    let attempts = 0;
-    const maxAttempts = 2;
+    // 2. PRIMARY: Kitsu Anime Details by ID
+    try {
+      const kitsuRes = await fetch(`${KITSU_URL}/anime/${args.id}`, {
+        headers: { Accept: "application/vnd.api+json" },
+      });
 
-    while (attempts < maxAttempts) {
-      attempts++;
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
+      if (kitsuRes.ok) {
+        const kitsuData = await kitsuRes.json();
+        if (kitsuData.data) {
+          const normalized = normalizeKitsuAnime(kitsuData.data);
 
-        response = await fetch(ANILIST_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({
-            query: INFO_QUERY,
-            variables: { id: args.id },
-          }),
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
+          // Cache to Convex DB
+          await ctx.runMutation(internal.anilist.cacheAnime, {
+            anilistId: args.id,
+            title: normalized.title,
+            description: normalized.description,
+            posterUrl: normalized.coverImage.extraLarge,
+            bannerUrl: normalized.bannerImage,
+            genres: normalized.genres,
+            episodes: normalized.episodes,
+            status: normalized.status,
+            averageScore: normalized.averageScore,
+            year: normalized.seasonYear,
+            studio: normalized.studio,
+            format: normalized.format,
+          });
 
-        if (response.ok) {
-          break;
-        }
-
-        if (response.status === 429 || response.status >= 500) {
-          if (attempts < maxAttempts) {
-            await new Promise((resolve) => setTimeout(resolve, 300));
-            continue;
-          }
-        }
-      } catch {
-        if (attempts < maxAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, 300));
-          continue;
+          return {
+            ...normalized,
+            relations: [],
+          };
         }
       }
+    } catch (kitsuErr) {
+      console.warn(`Kitsu details fetch for ${args.id} failed, trying AniList...`, kitsuErr);
     }
 
-    if (response && response.ok) {
-      try {
+    // 3. SECONDARY: AniList GraphQL
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+      const response = await fetch(ANILIST_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          query: INFO_QUERY,
+          variables: { id: args.id },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
         const data = await response.json();
         const media = data.data?.Media;
 
@@ -521,7 +673,6 @@ export const getAnimeDetails = action({
           const cleanedDesc = cleanDescription(media.description);
           const studioName = media.studios?.nodes?.[0]?.name || "Unknown Studio";
 
-          // Cache to Convex DB in background
           await ctx.runMutation(internal.anilist.cacheAnime, {
             anilistId: media.id,
             title: media.title,
@@ -544,12 +695,12 @@ export const getAnimeDetails = action({
             studio: studioName,
           };
         }
-      } catch (e) {
-        console.error(`Failed to parse AniList response for ${args.id}:`, e);
       }
+    } catch (aniErr) {
+      console.warn(`AniList details secondary fallback for ${args.id} failed:`, aniErr);
     }
 
-    // 3. Fallback: Try Jikan v4 by ID
+    // 4. TERTIARY: Jikan v4 (MyAnimeList)
     try {
       const jikanRes = await fetch(`${JIKAN_URL}/anime/${args.id}`);
       if (jikanRes.ok) {
@@ -598,10 +749,10 @@ export const getAnimeDetails = action({
         }
       }
     } catch (jikanErr) {
-      console.warn(`Jikan fallback fetch for ${args.id} failed:`, jikanErr);
+      console.warn(`Jikan fallback for ${args.id} failed:`, jikanErr);
     }
 
-    // 4. Fallback to cached database record if any exists
+    // 5. Database fallback
     if (cached) {
       return {
         id: cached.anilistId,
@@ -634,6 +785,16 @@ export const getInternalCachedAnime = internalQuery({
       .query("animeCache")
       .withIndex("by_anilistId", (q) => q.eq("anilistId", args.anilistId))
       .first();
+  },
+});
+
+export const getRecentCachedAnime = internalQuery({
+  args: { limit: v.number() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("animeCache")
+      .order("desc")
+      .take(args.limit);
   },
 });
 
