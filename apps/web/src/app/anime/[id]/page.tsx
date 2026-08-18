@@ -66,11 +66,17 @@ export default async function AnimeDetailsPage({
   const formattedAnime = {
     id: animeData.id.toString(),
     title: animeData.title?.english || animeData.title?.romaji || "Anime",
+    romajiTitle:
+      animeData.title?.romaji && animeData.title?.romaji !== animeData.title?.english
+        ? animeData.title?.romaji
+        : undefined,
+    nativeTitle: animeData.title?.native,
     description: animeData.description || "No synopsis available.",
     posterUrl: animeData.coverImage?.extraLarge || animeData.coverImage?.large || "",
     bannerUrl: animeData.bannerImage || animeData.coverImage?.extraLarge || animeData.coverImage?.large || "",
     genres: animeData.genres || ["Action"],
     status: animeData.status || "FINISHED",
+    format: animeData.format || "TV",
     episodes: animeData.episodes || 24,
     rating: animeData.averageScore ? (animeData.averageScore / 10).toFixed(1) : "9.0",
     year: animeData.seasonYear?.toString() || "2024",

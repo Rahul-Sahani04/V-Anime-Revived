@@ -14,6 +14,9 @@ interface AnimeCardProps {
   progressPercentage?: number;
   rating?: string;
   genre?: string;
+  format?: string;
+  year?: number | string;
+  status?: string;
 }
 
 export function AnimeCard({
@@ -25,6 +28,9 @@ export function AnimeCard({
   progressPercentage,
   rating,
   genre,
+  format,
+  year,
+  status,
 }: AnimeCardProps) {
   return (
     <motion.div
@@ -34,7 +40,7 @@ export function AnimeCard({
       transition={{ duration: 0.4, ease: "easeOut" }}
       className="group relative flex flex-col gap-2.5"
     >
-      <Link href={`/anime/${id}`} className="block">
+      <Link href={`/anime/${id}`} className="block" title={title}>
         <motion.div
           whileHover={{ y: -6, scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
@@ -64,18 +70,23 @@ export function AnimeCard({
           </div>
 
           {/* Top badges */}
-          <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none z-10">
+          <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none z-10 gap-1">
             {rating && (
               <div className="flex items-center gap-1 rounded-md bg-background/85 backdrop-blur-md px-1.5 py-0.5 text-[11px] font-mono font-bold text-primary border border-primary/20 shadow-sm">
                 <Star className="h-2.5 w-2.5 fill-current" />
                 <span>{rating}</span>
               </div>
             )}
-            {currentEpisode && (
+
+            {currentEpisode ? (
               <div className="rounded-md bg-background/85 backdrop-blur-md px-2 py-0.5 text-[11px] font-mono font-semibold text-foreground border border-surface-border shadow-sm ml-auto">
                 EP {currentEpisode}
               </div>
-            )}
+            ) : (format || year) ? (
+              <div className="rounded-md bg-background/85 backdrop-blur-md px-2 py-0.5 text-[10px] font-mono font-semibold text-neutral-300 border border-surface-border/80 shadow-sm ml-auto uppercase">
+                {format ? format : ""}{format && year ? " • " : ""}{year ? year : ""}
+              </div>
+            ) : null}
           </div>
 
           {/* Progress Bar for Continue Watching */}
@@ -92,15 +103,22 @@ export function AnimeCard({
         </motion.div>
 
         {/* Title and Metadata */}
-        <div className="flex flex-col pt-1">
-          <h3 className="line-clamp-1 text-sm font-semibold text-foreground transition-colors duration-200 group-hover:text-primary">
+        <div className="flex flex-col pt-1.5">
+          <h3
+            className="line-clamp-3 min-h-[3.25rem] text-[13px] sm:text-sm font-semibold text-foreground transition-colors duration-200 group-hover:text-primary leading-[1.3]"
+            title={title}
+          >
             {title}
           </h3>
-          <div className="mt-0.5 flex items-center justify-between text-xs text-muted font-medium">
-            {genre ? <span>{genre}</span> : <span>{episodeCount ? `${episodeCount} Episodes` : "TV Series"}</span>}
-            {progressPercentage !== undefined && (
-              <span className="text-[11px] font-mono text-primary">{progressPercentage}% watched</span>
-            )}
+          <div className="mt-1 flex items-center justify-between text-xs text-muted font-medium">
+            <span className="truncate pr-1">
+              {genre ? genre : `${format || "TV"}${year ? ` • ${year}` : ""}`}
+            </span>
+            {progressPercentage !== undefined ? (
+              <span className="shrink-0 text-[11px] font-mono text-primary">{progressPercentage}% watched</span>
+            ) : episodeCount ? (
+              <span className="shrink-0 text-neutral-400 font-mono text-[11px]">{episodeCount} Ep</span>
+            ) : null}
           </div>
         </div>
       </Link>

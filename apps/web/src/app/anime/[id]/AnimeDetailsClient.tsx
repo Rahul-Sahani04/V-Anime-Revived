@@ -14,11 +14,14 @@ interface AnimeDetailsClientProps {
   anime: {
     id: string;
     title: string;
+    romajiTitle?: string;
+    nativeTitle?: string;
     description: string;
     posterUrl: string;
     bannerUrl: string;
     genres: string[];
     status: string;
+    format?: string;
     episodes: number;
     rating?: string;
     year?: string;
@@ -156,10 +159,20 @@ export function AnimeDetailsClient({ anime }: AnimeDetailsClientProps) {
           >
             {/* Tags / Metadata */}
             <div className="flex flex-wrap items-center gap-2 mb-3">
-              <span className="rounded-md bg-primary/15 text-primary border border-primary/30 px-2.5 py-0.5 text-xs font-semibold">
+              {anime.format && (
+                <span className="rounded-md bg-white/10 text-white font-mono font-bold border border-white/20 px-2.5 py-0.5 text-xs uppercase tracking-wider">
+                  {anime.format}
+                </span>
+              )}
+              {anime.year && (
+                <span className="rounded-md bg-surface text-neutral-300 font-mono font-bold border border-surface-border px-2.5 py-0.5 text-xs">
+                  {anime.year}
+                </span>
+              )}
+              <span className="rounded-md bg-primary/15 text-primary border border-primary/30 px-2.5 py-0.5 text-xs font-semibold uppercase">
                 {anime.status}
               </span>
-              <span className="rounded-md bg-surface px-2.5 py-0.5 text-xs font-semibold text-neutral-300 border border-surface-border">
+              <span className="rounded-md bg-surface px-2.5 py-0.5 text-xs font-semibold text-neutral-300 border border-surface-border font-mono">
                 {anime.episodes} Episodes
               </span>
               <span className="rounded-md bg-surface px-2.5 py-0.5 text-xs font-semibold text-neutral-300 border border-surface-border">
@@ -171,9 +184,16 @@ export function AnimeDetailsClient({ anime }: AnimeDetailsClientProps) {
             </div>
 
             {/* Title */}
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-white mb-3">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-white mb-2 leading-tight">
               {anime.title}
             </h1>
+
+            {/* Secondary / Romaji Subtitle if present */}
+            {(anime.romajiTitle || anime.nativeTitle) && (
+              <p className="text-sm sm:text-base font-medium text-neutral-400 mb-3 italic">
+                {anime.romajiTitle || anime.nativeTitle}
+              </p>
+            )}
 
             {/* Genre Pills */}
             <div className="flex flex-wrap gap-1.5 mb-6">

@@ -561,7 +561,7 @@ export function SearchClient() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
+          className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
         >
           {results.map((anime) => (
             <AnimeCard
@@ -571,6 +571,9 @@ export function SearchClient() {
               posterUrl={anime.coverImage?.extraLarge || anime.coverImage?.large || ""}
               episodeCount={anime.episodes}
               rating={anime.averageScore ? (anime.averageScore / 10).toFixed(1) : undefined}
+              format={anime.format}
+              year={anime.seasonYear}
+              status={anime.status}
             />
           ))}
         </motion.div>
