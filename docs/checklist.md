@@ -47,9 +47,13 @@ This document tracks the overall progress of the V-Anime Revived project.
 
 - **Live Data Integration (Home & Details Pages)**:
   - Wired Home page to live AniList/Convex feed (`getHomeFeed`): Spotlight Hero Carousel, Continue Watching shelf (reactive Convex + guest `localStorage`), Trending Now, Popular This Season, and Critically Acclaimed shelves.
-- **Anime Details Page & API Resiliency Engine**:
-  - Implemented 3-stage retry loop with exponential backoff in `getAnimeDetails` for handling AniList rate-limits (HTTP 429) and Cloudflare timeouts on Vercel/serverless deployments.
-  - Implemented automatic fallback to persistent Convex DB cache (`animeCache`) when external AniList API is rate-limited.
+- **Multi-Source Metadata Engine (Convex DB Cache + AniList + Kitsu + Jikan)**:
+  - Implemented Cache-First SWR architecture returning cached anime records from Convex DB in <5ms.
+  - Implemented seamless multi-source fallback chain across `searchAnimeAdvanced`, `searchAnime`, `getHomeFeed`, and `getAnimeDetails`:
+    - **Primary**: Convex `animeCache` Database
+    - **Secondary**: AniList GraphQL API (with 3.5s timeout)
+    - **Tertiary (Fallback)**: **Kitsu API** for instant rate-limit bypassing on search, trending, and metadata
+    - **Quaternary (Fallback)**: **Jikan v4 (MyAnimeList)** for detailed studio, score, and title mappings
   - Implemented `AnimeDetailsFallback` client component providing automatic in-browser cache hydration and a 1-click "Retry Connection" recovery action so users never hit a dead-end page.
   - Implemented dynamic OpenGraph SEO metadata across Details (`/anime/[id]`) and Watch (`/anime/[id]/watch/[episode]`) pages.
 
