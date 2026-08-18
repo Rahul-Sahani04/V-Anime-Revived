@@ -39,6 +39,7 @@ interface VideoPlayerProps {
   server?: string;
   type?: "sub" | "dub";
   autoplay?: boolean;
+  animeTitle?: string;
   onEpisodeEnd?: () => void;
 }
 
@@ -50,6 +51,7 @@ export function VideoPlayer({
   server = "senshi",
   type = "sub",
   autoplay = true,
+  animeTitle,
   onEpisodeEnd,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -271,8 +273,9 @@ export function VideoPlayer({
           if (!isCancelled) abortController.abort();
         }, 5500);
 
+        const titleParam = animeTitle ? `&title=${encodeURIComponent(animeTitle)}` : "";
         const res = await fetch(
-          `${apiUrl}/api/anime/${animeId}/episodes/${episode}/watch?server=${server}&type=${type}`,
+          `${apiUrl}/api/anime/${animeId}/episodes/${episode}/watch?server=${server}&type=${type}${titleParam}`,
           { signal: abortController.signal }
         );
         if (fetchTimeout) clearTimeout(fetchTimeout);

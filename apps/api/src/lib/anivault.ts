@@ -48,7 +48,8 @@ export async function resolveStreamWithFallback(
   episode: string,
   type: string,
   preferredServer: string,
-  availableServers: Server[]
+  availableServers: Server[],
+  title?: string
 ): Promise<PlaybackSource> {
   
   // Sort servers so preferred is first, then ordered by score
@@ -78,7 +79,8 @@ export async function resolveStreamWithFallback(
 
     // 2. Fetch from Scraper
     try {
-      const url = `${ANIVAULT_BASE_URL}/api/watch/${serverId}/${animeId}/${episode}/${type}`;
+      const titleQuery = title ? `?title=${encodeURIComponent(title)}` : "";
+      const url = `${ANIVAULT_BASE_URL}/api/watch/${serverId}/${animeId}/${episode}/${type}${titleQuery}`;
       
       const response = await fetch(url, {
         next: { revalidate: 300 }, // Next.js HTTP cache as a secondary layer

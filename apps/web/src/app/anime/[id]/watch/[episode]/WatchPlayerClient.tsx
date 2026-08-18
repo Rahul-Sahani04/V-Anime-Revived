@@ -325,6 +325,7 @@ export function WatchPlayerClient({
               server={server}
               type={type}
               autoplay={autoplay}
+              animeTitle={displayTitle}
               onEpisodeEnd={handleEpisodeEnd}
             />
 

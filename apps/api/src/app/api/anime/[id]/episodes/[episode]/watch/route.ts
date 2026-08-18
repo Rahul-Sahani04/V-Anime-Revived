@@ -10,6 +10,7 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type") || "sub";
   const server = searchParams.get("server") || "senshi";
+  const title = searchParams.get("title") || undefined;
 
   try {
     // 1. Fetch available servers to build a fallback queue
@@ -21,7 +22,8 @@ export async function GET(
       episode,
       type,
       server,
-      availableServers
+      availableServers,
+      title
     );
 
     return NextResponse.json({
