@@ -70,7 +70,12 @@ export function ProfileClient() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
-  const [importSummary, setImportSummary] = useState<{ totalImported: number } | null>(null);
+  const [importSummary, setImportSummary] = useState<{
+    totalImported: number;
+    totalAvailable?: number;
+    truncated?: boolean;
+  } | null>(null);
+  const [oauthState, setOauthState] = useState<string | null>(null);
 
   const preferredLanguage = localLanguage ?? preferences?.preferredLanguage ?? "sub";
   const preferredServer = localServer ?? preferences?.preferredServer ?? "senshi";
@@ -124,8 +129,12 @@ export function ProfileClient() {
     const hash = window.location.hash;
     if (hash && hash.includes("access_token=")) {
       const match = hash.match(/access_token=([^&]+)/);
-      if (match && match[1]) {
+      const stateMatch = hash.match(/(?:^|&)state=([^&]+)/);
+      const expectedState = window.sessionStorage.getItem("vanime-anilist-oauth-state");
+      const stateMatches = expectedState && stateMatch && decodeURIComponent(stateMatch[1]) === expectedState;
+      if (match && match[1] && stateMatches) {
         const token = decodeURIComponent(match[1]);
+        window.sessionStorage.removeItem("vanime-anilist-oauth-state");
         window.history.replaceState(null, "", window.location.pathname);
         connectTokenAction({ accessToken: token })
           .then(() => {
@@ -134,6 +143,9 @@ export function ProfileClient() {
           .catch((err) => {
             console.error("Auto-connect AniList failed:", err);
           });
+      } else if (match) {
+        // Never leave an unsolicited access token in browser history or the address bar.
+        window.history.replaceState(null, "", window.location.pathname);
       }
     }
   }, [isSignedIn, connectTokenAction]);
@@ -157,12 +169,27 @@ export function ProfileClient() {
     }
   };
 
+  const createOAuthState = () => {
+    const state = typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID().replace(/-/g, "")
+      : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+    setOauthState(state);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem("vanime-anilist-oauth-state", state);
+    }
+    return state;
+  };
+
   // AniList Import Handler
   const handleImportCollection = async () => {
     setIsImporting(true);
     try {
       const result = await importCollectionAction({});
-      setImportSummary({ totalImported: result.totalImported });
+      setImportSummary({
+        totalImported: result.totalImported,
+        totalAvailable: result.totalAvailable,
+        truncated: result.truncated,
+      });
     } catch (err) {
       console.error("AniList import error:", err);
     } finally {
@@ -400,7 +427,10 @@ export function ProfileClient() {
               </div>
 
               <button
-                onClick={() => setShowTokenDialog(true)}
+                onClick={() => {
+                  createOAuthState();
+                  setShowTokenDialog(true);
+                }}
                 className="flex items-center gap-2 rounded-xl bg-[#02a9ff] hover:bg-[#02a9ff]/90 px-5 py-2.5 text-xs font-bold text-white transition-all shadow-[0_0_15px_rgba(2,169,255,0.35)] shrink-0"
               >
                 <span>Connect AniList</span>
@@ -598,7 +628,7 @@ export function ProfileClient() {
                     Authorize V-Anime using your configured AniList Client (ID: <code className="text-[#02a9ff] font-mono">48831</code>):
                   </p>
                   <a
-                    href="https://anilist.co/api/v2/oauth/authorize?client_id=48831&response_type=token"
+                     href={`https://anilist.co/api/v2/oauth/authorize?client_id=48831&response_type=token&state=${encodeURIComponent(oauthState || "")}`}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#02a9ff] hover:bg-[#02a9ff]/90 px-6 py-2.5 text-xs font-bold text-white shadow-[0_0_15px_rgba(2,169,255,0.4)] transition-all w-full"
                   >
                     <ExternalLink className="h-3.5 w-3.5" />
@@ -683,7 +713,10 @@ export function ProfileClient() {
               </div>
               <h3 className="text-base font-bold text-white mb-1">AniList Sync Complete!</h3>
               <p className="text-xs text-muted mb-4">
-                Successfully imported and synchronized <span className="font-bold text-white">{importSummary.totalImported} anime titles</span> into your V-Anime Watchlist.
+                Imported <span className="font-bold text-white">{importSummary.totalImported}</span>{" "}
+                {importSummary.truncated
+                  ? `of ${importSummary.totalAvailable ?? "more than the supported"} available anime titles (the import is capped at 500).`
+                  : "anime titles into your V-Anime Watchlist."}
               </p>
               <button
                 onClick={() => {

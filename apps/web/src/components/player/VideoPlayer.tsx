@@ -86,7 +86,7 @@ export function VideoPlayer({
   const numAnimeId = parseInt(animeId, 10) || 0;
   const numEpisode = parseInt(episode, 10) || 1;
 
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, getToken } = useAuth();
   const updateProgressMutation = useMutation(api.progress.updateProgress);
   const serverProgress = useQuery(
     api.progress.getAnimeProgress,
@@ -267,22 +267,38 @@ export function VideoPlayer({
       let fetchTimeout: NodeJS.Timeout | null = null;
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+        const token = await getToken();
+        if (!token) {
+          setError("Sign in to start playback.");
+          setIsLoading(false);
+          return;
+        }
         
-        // 5.5s timeout for scraper responsiveness
+        // Provider fallback can take up to 7 * 8 seconds on a cold scraper.
+        // Keep the browser deadline just above that bounded server budget.
         fetchTimeout = setTimeout(() => {
           if (!isCancelled) abortController.abort();
-        }, 5500);
+        }, 60_000);
 
         const titleParam = animeTitle ? `&title=${encodeURIComponent(animeTitle)}` : "";
         const res = await fetch(
           `${apiUrl}/api/anime/${animeId}/episodes/${episode}/watch?server=${server}&type=${type}${titleParam}`,
-          { signal: abortController.signal }
+          {
+            signal: abortController.signal,
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: "include",
+          }
         );
         if (fetchTimeout) clearTimeout(fetchTimeout);
 
         if (isCancelled) return;
 
         if (!res.ok) {
+          if (res.status === 401 || res.status === 403) {
+            setError("Your session expired. Sign in again to continue playback.");
+            setIsLoading(false);
+            return;
+          }
           throw new Error(`Server returned HTTP ${res.status}`);
         }
 
@@ -424,7 +440,7 @@ export function VideoPlayer({
         video.load();
       }
     };
-  }, [animeId, episode, server, type, autoplay, retryTrigger]);
+  }, [animeId, episode, server, type, autoplay, retryTrigger, getToken]);
 
   // Video Event Listeners (Syncing State)
   const handleTimeUpdate = () => {

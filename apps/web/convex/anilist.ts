@@ -604,7 +604,62 @@ export const getAnimeDetails = action({
       };
     }
 
-    // 2. PRIMARY: Kitsu Anime Details by ID
+    // AniList IDs are the application's canonical IDs. Kitsu uses a separate
+    // numeric namespace, so it must not be queried first by the same number
+    // (for example, Kitsu anime 20 is not AniList anime 20).
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const response = await fetch(ANILIST_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ query: INFO_QUERY, variables: { id: args.id } }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        const media = data.data?.Media;
+        if (media) {
+          const derivedEpisodes =
+            media.episodes ||
+            (media.nextAiringEpisode?.episode
+              ? media.nextAiringEpisode.episode - 1
+              : media.status === "RELEASING"
+                ? 1100
+                : 24);
+          const cleanedDesc = cleanDescription(media.description);
+          const studioName = media.studios?.nodes?.[0]?.name || "Unknown Studio";
+
+          await ctx.runMutation(internal.anilist.cacheAnime, {
+            anilistId: media.id,
+            title: media.title,
+            description: cleanedDesc,
+            posterUrl: media.coverImage?.extraLarge || media.coverImage?.large || "",
+            bannerUrl: media.bannerImage || "",
+            genres: media.genres || [],
+            episodes: derivedEpisodes,
+            status: media.status,
+            averageScore: media.averageScore,
+            year: media.seasonYear,
+            studio: studioName,
+            format: media.format,
+          });
+
+          return {
+            ...media,
+            episodes: derivedEpisodes,
+            description: cleanedDesc,
+            studio: studioName,
+          };
+        }
+      }
+    } catch (aniErr) {
+      console.warn(`AniList details primary lookup for ${args.id} failed, trying fallbacks...`, aniErr);
+    }
+
+    // Kitsu is a fallback only. Its IDs are not interchangeable with AniList.
     try {
       const kitsuRes = await fetch(`${KITSU_URL}/anime/${args.id}`, {
         headers: { Accept: "application/vnd.api+json" },

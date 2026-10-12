@@ -1,16 +1,26 @@
 import { NextResponse } from "next/server";
 import { getAvailableServers, resolveStreamWithFallback } from "@/lib/anivault";
+import { consumePlaybackRateLimit, requireClerkUser, parsePlaybackParams } from "@/lib/security";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string; episode: string }> }
 ) {
   const { id, episode } = await params;
-  
-  const { searchParams } = new URL(request.url);
-  const type = searchParams.get("type") || "sub";
-  const server = searchParams.get("server") || "senshi";
-  const title = searchParams.get("title") || undefined;
+
+  const user = await requireClerkUser(request);
+  if (!user) {
+    return NextResponse.json({ success: false, error: "Authentication required." }, { status: 401 });
+  }
+
+  const playbackParams = parsePlaybackParams(request, { id, episode });
+  if (!playbackParams) {
+    return NextResponse.json({ success: false, error: "Invalid playback parameters." }, { status: 400 });
+  }
+  if (!consumePlaybackRateLimit(user.sub)) {
+    return NextResponse.json({ success: false, error: "Playback rate limit exceeded." }, { status: 429 });
+  }
+  const { type, server, title } = playbackParams;
 
   try {
     // 1. Fetch available servers to build a fallback queue

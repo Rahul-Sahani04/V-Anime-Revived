@@ -4,11 +4,18 @@ import { v } from "convex/values";
 /**
  * Helper to get authenticated user ID or throw an error.
  */
-async function getAuthenticatedUserId(ctx: { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } }) {
+const PINNED_ISSUER = "https://usable-alien-7699.clerk.accounts.dev";
+
+async function getAuthenticatedUserId(ctx: { auth: { getUserIdentity: () => Promise<{ subject: string; issuer?: string } | null> } }) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
     throw new Error("Unauthenticated: User must be signed in.");
   }
+  if (identity.issuer && identity.issuer !== PINNED_ISSUER) {
+    throw new Error("Unsupported authentication issuer.");
+  }
+  // Existing rows use Clerk's subject for this pinned issuer. Keep that key
+  // until an issuer-qualified, explicitly deployed data migration is planned.
   return identity.subject;
 }
 
@@ -23,6 +30,7 @@ export const getAnimeUserStatus = query({
       return { isFavorite: false, isWatchlisted: false };
     }
 
+    if (identity.issuer && identity.issuer !== PINNED_ISSUER) return { isFavorite: false, isWatchlisted: false };
     const userId = identity.subject;
 
     const favorite = await ctx.db
@@ -115,6 +123,7 @@ export const getLibrary = query({
       return { favorites: [], watchlist: [] };
     }
 
+    if (identity.issuer && identity.issuer !== PINNED_ISSUER) return { favorites: [], watchlist: [] };
     const userId = identity.subject;
 
     // Fetch favorites

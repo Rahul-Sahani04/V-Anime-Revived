@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
+import { getRequestTimeoutMs } from "./security";
 
-export const ANIVAULT_BASE_URL = process.env.ANIVAULT_API_URL || "http://localhost:3002";
+export const ANIVAULT_BASE_URL = process.env.ANIVAULT_API_URL || "http://localhost:3000";
 
 // Gracefully handle missing Redis credentials (e.g. during local dev without .env)
 const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -16,10 +17,13 @@ export interface Server {
   score?: number;
 }
 
-export interface PlaybackSource {
-  mode: "hls" | "mp4" | "iframe";
-  url: string;
-  subtitles?: { lang: string; url: string }[];
+export type PlaybackSource = Record<string, unknown>;
+
+function isPlaybackPayload(value: unknown): value is PlaybackSource {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const payload = value as Record<string, unknown>;
+  return ["hlsProxyUrl", "m3u8", "mp4ProxyUrl", "mp4", "streamUrl", "embedUrl"]
+    .some((key) => typeof payload[key] === "string" && payload[key].length > 0);
 }
 
 /**
@@ -51,7 +55,8 @@ export async function resolveStreamWithFallback(
   availableServers: Server[],
   title?: string
 ): Promise<PlaybackSource> {
-  
+  const deadline = Date.now() + 55_000;
+
   // Sort servers so preferred is first, then ordered by score
   const fallbackQueue = [
     preferredServer,
@@ -62,13 +67,15 @@ export async function resolveStreamWithFallback(
   ];
 
   for (const serverId of fallbackQueue) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
     const cacheKey = `stream:${animeId}:${episode}:${type}:${serverId}`;
 
     // 1. Check Redis Cache
     if (redis) {
       try {
-        const cached = await redis.get<PlaybackSource>(cacheKey);
-        if (cached) {
+        const cached = await redis.get<unknown>(cacheKey);
+        if (isPlaybackPayload(cached)) {
           console.log(`[Cache Hit] Serving ${serverId} from Redis for ${animeId} EP ${episode}`);
           return cached;
         }
@@ -83,16 +90,24 @@ export async function resolveStreamWithFallback(
       const url = `${ANIVAULT_BASE_URL}/api/watch/${serverId}/${animeId}/${episode}/${type}${titleQuery}`;
       
       const response = await fetch(url, {
+        signal: AbortSignal.timeout(Math.min(getRequestTimeoutMs(), remainingMs)),
+        headers: process.env.SCRAPER_API_KEY
+          ? { "X-Scraper-Key": process.env.SCRAPER_API_KEY }
+          : undefined,
         next: { revalidate: 300 }, // Next.js HTTP cache as a secondary layer
       });
 
       if (response.ok) {
         const data = await response.json();
+        if (!isPlaybackPayload(data)) {
+          console.warn(`[Fallback] Server ${serverId} returned an invalid playback payload.`);
+          continue;
+        }
         
-        // 3. Save to Redis Cache (Expire after 45 minutes / 2700 seconds)
+        // Keep stream URLs short-lived and preserve the scraper's raw fields.
         if (redis) {
           try {
-            await redis.set(cacheKey, data, { ex: 2700 });
+            await redis.set(cacheKey, data, { ex: 300 });
             console.log(`[Cache Miss] Saved ${serverId} to Redis for ${animeId} EP ${episode}`);
           } catch (err) {
             console.warn("[Redis] Failed to save cache:", err);

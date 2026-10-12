@@ -4,10 +4,24 @@ import { v } from "convex/values";
 /**
  * Helper to get authenticated user ID or null.
  */
-async function getUserId(ctx: { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } }) {
+const PINNED_ISSUER = "https://usable-alien-7699.clerk.accounts.dev";
+
+async function getUserId(ctx: { auth: { getUserIdentity: () => Promise<{ subject: string; issuer?: string } | null> } }) {
   const identity = await ctx.auth.getUserIdentity();
-  return identity ? identity.subject : null;
+  if (!identity || (identity.issuer && identity.issuer !== PINNED_ISSUER)) return null;
+  return identity.subject;
 }
+
+const LANGUAGE_OPTIONS = new Set(["sub", "dub"]);
+const SERVER_OPTIONS = new Set([
+  "senshi",
+  "anikoto",
+  "miruro",
+  "anizone",
+  "animeheaven",
+  "reanime",
+  "anineko",
+]);
 
 const DEFAULT_PREFERENCES = {
   preferredLanguage: "sub",
@@ -33,8 +47,12 @@ export const getUserPreferences = query({
     if (!prefs) return DEFAULT_PREFERENCES;
 
     return {
-      preferredLanguage: prefs.preferredLanguage,
-      preferredServer: prefs.preferredServer,
+      preferredLanguage: LANGUAGE_OPTIONS.has(prefs.preferredLanguage)
+        ? prefs.preferredLanguage
+        : DEFAULT_PREFERENCES.preferredLanguage,
+      preferredServer: SERVER_OPTIONS.has(prefs.preferredServer)
+        ? prefs.preferredServer
+        : DEFAULT_PREFERENCES.preferredServer,
       autoplay: prefs.autoplay,
       autoNext: prefs.autoNext,
     };
@@ -55,6 +73,12 @@ export const updateUserPreferences = mutation({
     const userId = await getUserId(ctx);
     if (!userId) {
       throw new Error("Unauthenticated: User must be signed in to save preferences.");
+    }
+    if (args.preferredLanguage !== undefined && !LANGUAGE_OPTIONS.has(args.preferredLanguage)) {
+      throw new Error("Invalid preferred language.");
+    }
+    if (args.preferredServer !== undefined && !SERVER_OPTIONS.has(args.preferredServer)) {
+      throw new Error("Invalid preferred server.");
     }
 
     const existing = await ctx.db
@@ -97,25 +121,28 @@ export const getUserStats = query({
         totalWatchedEpisodes: 0,
         totalHoursWatched: 0,
         rank: "Anime Novice 🌱",
+        statsComplete: true,
       };
     }
 
+    const statsLimit = 10000;
     const favorites = await ctx.db
       .query("favorites")
       .withIndex("by_user_and_anime", (q) => q.eq("userId", userId))
-      .collect();
+      .take(statsLimit + 1);
 
     const watchlist = await ctx.db
       .query("watchlist")
       .withIndex("by_user_and_anime", (q) => q.eq("userId", userId))
-      .collect();
+      .take(statsLimit + 1);
 
     const history = await ctx.db
       .query("watchHistory")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .collect();
+      .take(statsLimit + 1);
 
-    const totalWatchedEpisodes = history.length;
+    const statsComplete = favorites.length <= statsLimit && watchlist.length <= statsLimit && history.length <= statsLimit;
+    const totalWatchedEpisodes = Math.min(history.length, statsLimit);
     const totalHoursWatched = Math.round((totalWatchedEpisodes * 24) / 60 * 10) / 10;
 
     let rank = "Anime Novice 🌱";
@@ -125,11 +152,12 @@ export const getUserStats = query({
     else if (totalWatchedEpisodes >= 5) rank = "Anime Enthusiast ✨";
 
     return {
-      totalFavorites: favorites.length,
-      totalWatchlist: watchlist.length,
+      totalFavorites: Math.min(favorites.length, statsLimit),
+      totalWatchlist: Math.min(watchlist.length, statsLimit),
       totalWatchedEpisodes,
       totalHoursWatched,
       rank,
+      statsComplete,
     };
   },
 });

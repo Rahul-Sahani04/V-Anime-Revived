@@ -69,7 +69,12 @@ export default defineSchema({
     episodeNumber: v.number(),
     server: v.string(),
     watchedAt: v.number(),
-  }).index("by_userId", ["userId"]),
+  })
+    .index("by_userId", ["userId"])
+    // Completion writes are idempotent per user/anime/episode. The server
+    // still checks this index before inserting so existing duplicate rows do
+    // not prevent reads while the index is being rolled out.
+    .index("by_user_and_anime_and_episode", ["userId", "anilistId", "episodeNumber"]),
 
   anilistAccounts: defineTable({
     userId: v.string(),

@@ -1,12 +1,57 @@
-import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 /**
  * Helper to get authenticated user ID or null.
  */
-async function getUserId(ctx: { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } }) {
+const PINNED_ISSUER = "https://usable-alien-7699.clerk.accounts.dev";
+
+async function getUserId(ctx: { auth: { getUserIdentity: () => Promise<{ subject: string; issuer?: string } | null> } }) {
   const identity = await ctx.auth.getUserIdentity();
-  return identity ? identity.subject : null;
+  if (!identity || (identity.issuer && identity.issuer !== PINNED_ISSUER)) return null;
+  return identity.subject;
+}
+
+const MAX_GUEST_PROGRESS_ITEMS = 100;
+const MAX_EPISODE_NUMBER = 10000;
+const MAX_DURATION_SECONDS = 24 * 60 * 60;
+const SERVER_IDS = new Set([
+  "senshi",
+  "anikoto",
+  "miruro",
+  "anizone",
+  "animeheaven",
+  "reanime",
+  "anineko",
+]);
+
+function assertFiniteNumber(value: number, field: string) {
+  if (!Number.isFinite(value)) throw new Error(`Invalid ${field}.`);
+}
+
+function validateProgress(item: {
+  anilistId: number;
+  episodeNumber: number;
+  position: number;
+  duration: number;
+  percentage: number;
+  server?: string;
+  lastWatchedAt?: number;
+}) {
+  for (const [field, value] of Object.entries(item)) {
+    if (typeof value === "number") assertFiniteNumber(value, field);
+  }
+  if (!Number.isSafeInteger(item.anilistId) || item.anilistId <= 0) throw new Error("Invalid anime ID.");
+  if (!Number.isSafeInteger(item.episodeNumber) || item.episodeNumber < 1 || item.episodeNumber > MAX_EPISODE_NUMBER) {
+    throw new Error("Invalid episode number.");
+  }
+  if (item.position < 0 || item.duration < 0 || item.duration > MAX_DURATION_SECONDS || item.position > item.duration) {
+    throw new Error("Progress position must be within the episode duration.");
+  }
+  if (item.percentage < 0 || item.percentage > 100) throw new Error("Progress percentage must be between 0 and 100.");
+  if (item.lastWatchedAt !== undefined && item.lastWatchedAt < 0) throw new Error("Invalid last watched timestamp.");
+  if (item.server !== undefined && !SERVER_IDS.has(item.server)) throw new Error("Invalid streaming server.");
 }
 
 /**
@@ -23,6 +68,7 @@ export const updateProgress = mutation({
     server: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    validateProgress(args);
     const userId = await getUserId(ctx);
     if (!userId) {
       // Unauthenticated - caller will handle localStorage
@@ -65,13 +111,22 @@ export const updateProgress = mutation({
 
     // If marked completed, log to watchHistory
     if (args.completed) {
-      await ctx.db.insert("watchHistory", {
-        userId,
-        anilistId: args.anilistId,
-        episodeNumber: args.episodeNumber,
-        server: args.server || "senshi",
-        watchedAt: now,
-      });
+      const existingHistory = await ctx.db
+        .query("watchHistory")
+        .withIndex("by_user_and_anime_and_episode", (q) =>
+          q.eq("userId", userId).eq("anilistId", args.anilistId).eq("episodeNumber", args.episodeNumber)
+        )
+        .first();
+
+      if (!existingHistory) {
+        await ctx.db.insert("watchHistory", {
+          userId,
+          anilistId: args.anilistId,
+          episodeNumber: args.episodeNumber,
+          server: args.server || "senshi",
+          watchedAt: now,
+        });
+      }
     }
 
     return { success: true };
@@ -89,6 +144,7 @@ export const dismissWatchProgress = mutation({
   handler: async (ctx, args) => {
     const userId = await getUserId(ctx);
     if (!userId) return { success: false };
+    let scheduled = false;
 
     if (args.episodeNumber !== undefined) {
       const item = await ctx.db
@@ -110,14 +166,21 @@ export const dismissWatchProgress = mutation({
         .withIndex("by_user_and_anime", (q) =>
           q.eq("userId", userId).eq("anilistId", args.anilistId)
         )
-        .collect();
+        .take(100);
 
       for (const it of items) {
         await ctx.db.delete(it._id);
       }
+      if (items.length === 100) {
+        scheduled = true;
+        await ctx.scheduler.runAfter(0, internal.progress.dismissWatchProgressBatch, {
+          userId,
+          anilistId: args.anilistId,
+        });
+      }
     }
 
-    return { success: true };
+    return { success: true, scheduled };
   },
 });
 
@@ -150,13 +213,44 @@ export const clearWatchHistory = mutation({
     const history = await ctx.db
       .query("watchHistory")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .collect();
+      .take(1000);
 
     for (const item of history) {
       await ctx.db.delete(item._id);
     }
+    if (history.length === 1000) {
+      await ctx.scheduler.runAfter(0, internal.progress.clearWatchHistoryBatch, { userId });
+    }
 
-    return { deleted: history.length };
+    return { deleted: history.length, scheduled: history.length === 1000 };
+  },
+});
+
+export const dismissWatchProgressBatch = internalMutation({
+  args: { userId: v.string(), anilistId: v.number() },
+  handler: async (ctx, args) => {
+    const items = await ctx.db
+      .query("watchProgress")
+      .withIndex("by_user_and_anime", (q) => q.eq("userId", args.userId).eq("anilistId", args.anilistId))
+      .take(100);
+    for (const item of items) await ctx.db.delete(item._id);
+    if (items.length === 100) {
+      await ctx.scheduler.runAfter(0, internal.progress.dismissWatchProgressBatch, args);
+    }
+  },
+});
+
+export const clearWatchHistoryBatch = internalMutation({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    const history = await ctx.db
+      .query("watchHistory")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .take(1000);
+    for (const item of history) await ctx.db.delete(item._id);
+    if (history.length === 1000) {
+      await ctx.scheduler.runAfter(0, internal.progress.clearWatchHistoryBatch, args);
+    }
   },
 });
 
@@ -286,6 +380,11 @@ export const syncGuestProgress = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    if (args.items.length > MAX_GUEST_PROGRESS_ITEMS) {
+      throw new Error(`Guest progress sync is limited to ${MAX_GUEST_PROGRESS_ITEMS} items.`);
+    }
+    for (const item of args.items) validateProgress(item);
+
     const userId = await getUserId(ctx);
     if (!userId || args.items.length === 0) return { synced: 0 };
 
